@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "painel-dev",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "set -a; . ../.env; set +a; PAINEL_AUTH=\"$PAINEL_USUARIO:$PAINEL_SENHA\" exec npx vite --port 5196", "painel"],
+      "cwd": "painel",
+      "port": 5196
+    }
+  ]
+}

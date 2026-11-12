@@ -1,0 +1,6 @@
+.env
+node_modules/
+painel/node_modules/
+painel/dist/
+backups/
+qr.png

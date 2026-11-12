@@ -1,0 +1,151 @@
+{
+  "id": "bf99erros0000001",
+  "name": "99 · Alerta de erro",
+  "active": false,
+  "nodes": [
+    {
+      "name": "Erro",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "parameters": {},
+      "id": "52cb0bbe-838a-6fae-6429-7932d3a0f2d7",
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "name": "Mensagem",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "// ==== GERADO por scripts/build-workflows.mjs a partir de src/ (cpf). Edite em src/ e rode make build. ====\n// ── src/cpf.js ──\n// Validação de CPF e e-mail, máscara para logs (LGPD).\n\nfunction soDigitos(s) {\n  return String(s ?? '').replace(/\\D/g, '');\n}\n\nfunction validarCpf(entrada) {\n  const c = soDigitos(entrada);\n  if (c.length !== 11 || /^(\\d)\\1{10}$/.test(c)) return false;\n  const dv = (n) => {\n    let soma = 0;\n    for (let i = 0; i < n; i++) soma += Number(c[i]) * (n + 1 - i);\n    const r = (soma * 10) % 11;\n    return r === 10 ? 0 : r;\n  };\n  return dv(9) === Number(c[9]) && dv(10) === Number(c[10]);\n}\n\nfunction formatarCpf(entrada) {\n  const c = soDigitos(entrada);\n  return `${c.slice(0, 3)}.${c.slice(3, 6)}.${c.slice(6, 9)}-${c.slice(9)}`;\n}\n\n// 123.456.789-09 -> ***.456.789-**\nfunction mascararCpf(entrada) {\n  const c = soDigitos(entrada);\n  return `***.${c.slice(3, 6)}.${c.slice(6, 9)}-**`;\n}\n\n// Mascara qualquer CPF (com ou sem pontuação) dentro de um texto livre.\nfunction mascararCpfsNoTexto(texto) {\n  return String(texto ?? '').replace(/\\b\\d{3}\\.?\\d{3}\\.?\\d{3}-?\\d{2}\\b/g, (m) => mascararCpf(m));\n}\n\nfunction validarEmail(s) {\n  return /^[^\\s@]+@[^\\s@]+\\.[a-z]{2,}$/i.test(String(s ?? '').trim());\n}\n// ==== fim do código gerado ====\n\nconst e = $input.first().json;\nconst msg = mascararCpfsNoTexto(e.execution?.error?.message ?? e.trigger?.error?.message ?? 'erro desconhecido');\nreturn [{ json: { texto: `⚠️ Erro no bot\\n${e.workflow?.name ?? '?'} → ${e.execution?.lastNodeExecuted ?? '?'}\\n${msg}`.slice(0, 600) } }];\n"
+      },
+      "id": "2435dfeb-8d42-1304-a5f0-b8114d64c491",
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "name": "Admin",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select valor as admin from app.config where chave = 'admin_numero'",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "bfPostgres000001",
+          "name": "BF Postgres"
+        }
+      },
+      "id": "34e59934-3adb-befc-1585-0bc2e4e19bb8",
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "name": "Para o admin",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const admin = $input.first().json.admin;\nreturn admin ? [{ json: { numero: admin, mensagens: [{ tipo: 'texto', texto: $('Mensagem').first().json.texto }] } }] : [];\n"
+      },
+      "id": "c497d0e9-ca86-877e-02a3-ce3801733684",
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "name": "Enviar",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "bf06enviar000001",
+          "mode": "id"
+        },
+        "mode": "once",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "a2a1860d-2fb9-ade9-9cbb-8faf30f2362c",
+      "position": [
+        880,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Erro": {
+      "main": [
+        [
+          {
+            "node": "Mensagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mensagem": {
+      "main": [
+        [
+          {
+            "node": "Admin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Admin": {
+      "main": [
+        [
+          {
+            "node": "Para o admin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Para o admin": {
+      "main": [
+        [
+          {
+            "node": "Enviar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Bahia",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

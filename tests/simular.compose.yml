@@ -1,0 +1,13 @@
+# Só para scripts/simular.sh: o n8n fala com uma Evolution falsa e o debounce cai para 1 s.
+services:
+  mock-evolution:
+    image: node:24.22.1-alpine
+    command: ["node", "/mock/mock-evolution.mjs"]
+    volumes:
+      - ./tests/mock-evolution.mjs:/mock/mock-evolution.mjs:ro
+    ports:
+      - "127.0.0.1:8099:8080"
+  n8n:
+    environment:
+      EVOLUTION_URL: http://mock-evolution:8080
+      DEBOUNCE_SEGUNDOS: 1

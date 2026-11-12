@@ -1,0 +1,160 @@
+{
+  "id": "bf06enviar000001",
+  "name": "06 · Enviar WhatsApp",
+  "active": false,
+  "nodes": [
+    {
+      "name": "Entrada",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "3708f08b-33ba-32d6-8674-ed9968404e44",
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "name": "Montar chamadas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "// ==== GERADO por scripts/build-workflows.mjs a partir de src/ (canais). Edite em src/ e rode make build. ====\n// ── src/canais.js ──\n// Adaptadores: Evolution (WhatsApp) e ManyChat (Instagram) <-> formato do core.\n// Mensagem do core: {tipo:'texto', texto} | {tipo:'imagem'|'documento', url?|base64?, texto?, mimetype?, fileName?}\n\n// Webhook messages.upsert da Evolution v2 -> {id, contato_id, nome, texto, midia, fromMe} ou null (ignorar).\n// Mensagens enviadas pela API não voltam aqui (emitOwnEvents=false): fromMe = alguém digitou no celular.\nfunction normalizarEvolution(body) {\n  if (!body || body.event !== 'messages.upsert') return null;\n  const d = Array.isArray(body.data) ? body.data[0] : body.data;\n  const key = d?.key ?? {};\n  const jid = key.remoteJidAlt && String(key.remoteJid).endsWith('@lid') ? key.remoteJidAlt : key.remoteJid;\n  if (!jid || !key.id) return null;\n  if (/@(g\\.us|broadcast|newsletter)$/.test(jid)) return null; // grupos, status, canais\n  const m = d.message ?? {};\n  const texto = m.conversation ?? m.extendedTextMessage?.text ?? m.imageMessage?.caption ?? m.documentMessage?.caption\n    ?? m.documentWithCaptionMessage?.message?.documentMessage?.caption ?? m.buttonsResponseMessage?.selectedDisplayText\n    ?? m.listResponseMessage?.title ?? '';\n  let midia = null;\n  const doc = m.documentMessage ?? m.documentWithCaptionMessage?.message?.documentMessage;\n  if (m.imageMessage) midia = { tipo: 'imagem', mimetype: m.imageMessage.mimetype ?? 'image/jpeg' };\n  else if (doc) midia = { tipo: 'documento', mimetype: doc.mimetype ?? '', fileName: doc.fileName ?? 'arquivo' };\n  else if (m.audioMessage || m.videoMessage || m.stickerMessage) midia = { tipo: m.audioMessage ? 'audio' : m.videoMessage ? 'video' : 'sticker' };\n  if (midia) {\n    midia.ref = `wa:${key.id}`;\n    if (m.base64) midia.base64 = m.base64;\n  }\n  if (!texto && !midia) return null; // reação, protocolo, enquete...\n  return {\n    id: key.id,\n    contato_id: String(jid).split('@')[0],\n    nome: key.fromMe ? null : d.pushName || null,\n    texto: String(texto).trim(),\n    midia,\n    fromMe: !!key.fromMe,\n  };\n}\n\n// Mensagens do core -> chamadas da Evolution. `numero` = dígitos ou JID de grupo.\n// O `delay` da Evolution mostra \"digitando...\" antes de enviar (anti-ban: 1–4 s pelo tamanho).\nfunction chamadasEvolution(numero, mensagens) {\n  return (mensagens ?? []).map((m) => {\n    const delay = atrasoDigitando(m.texto);\n    if (m.tipo === 'texto') return { endpoint: 'sendText', body: { number: numero, text: m.texto, delay } };\n    const mediatype = m.tipo === 'imagem' ? 'image' : 'document';\n    const body = { number: numero, mediatype, media: m.base64 ?? m.url, caption: m.texto ?? '', delay };\n    if (m.mimetype) body.mimetype = m.mimetype;\n    if (mediatype === 'document') body.fileName = m.fileName ?? 'comprovante.pdf';\n    return { endpoint: 'sendMedia', body };\n  });\n}\n\nfunction atrasoDigitando(texto) {\n  return Math.min(4000, Math.max(1000, 1000 + String(texto ?? '').length * 25));\n}\n\n// Corpo do External Request do ManyChat (ver manychat/SETUP.md). Aceita o corpo montado\n// ({contato_id, nome, texto, comprovante_url}) e o \"Full Contact Data\" ({id, name, last_input_text, custom_fields}).\nfunction normalizarManychat(body) {\n  const b = body ?? {};\n  const contato = String(b.contato_id ?? b.id ?? '').trim();\n  if (!contato) return null;\n  let texto = String(b.texto ?? b.last_input_text ?? '').trim();\n  const url = String(b.comprovante_url ?? b.custom_fields?.comprovante_url ?? '').trim() || (/^https?:\\/\\/\\S+$/.test(texto) && /cdn|fbsbx|lookaside|instagram/.test(texto) ? texto : '');\n  if (url && url === texto) texto = '';\n  return {\n    contato_id: contato,\n    nome: String(b.nome ?? b.name ?? '').trim() || null,\n    texto,\n    midia: url ? { tipo: /\\.pdf(\\?|$)/i.test(url) ? 'documento' : 'imagem', url, mimetype: /\\.pdf(\\?|$)/i.test(url) ? 'application/pdf' : 'image/jpeg' } : null,\n  };\n}\n\n// Resposta Dynamic Block v2 (Instagram): até 10 mensagens; só texto e imagem.\n// A action grava o estado no campo `estado` do ManyChat (o fluxo usa para pedir o comprovante).\nfunction respostaManychat(mensagens, estado) {\n  const msgs = (mensagens ?? []).flatMap((m) => {\n    if (m.tipo === 'imagem' && m.url) return [{ type: 'image', url: m.url }, ...(m.texto ? [{ type: 'text', text: m.texto }] : [])];\n    return m.texto ? [{ type: 'text', text: m.texto }] : [];\n  }).slice(0, 10);\n  const content = { type: 'instagram', messages: msgs, actions: [], quick_replies: [] };\n  if (estado) {\n    content.actions.push({ action: 'set_field_value', field_name: 'estado', value: estado });\n    content.actions.push({ action: 'unset_field_value', field_name: 'comprovante_url' }); // já foi lido; não reenviar\n  }\n  return { version: 'v2', content };\n}\n\n// Corpo do sendContent da API do ManyChat (aviso de /aprovar e /recusar no Instagram).\nfunction sendContentManychat(subscriberId, mensagens) {\n  const { content } = respostaManychat(mensagens, null);\n  delete content.actions;\n  delete content.quick_replies;\n  return { subscriber_id: Number(subscriberId), data: { version: 'v2', content } };\n}\n// ==== fim do código gerado ====\n\nconst out = [];\nfor (const { json } of $input.all()) {\n  if (!json.numero) continue;\n  for (const c of chamadasEvolution(String(json.numero), json.mensagens)) out.push({ json: c });\n}\nreturn out;\n"
+      },
+      "id": "28ded674-b18e-6d82-dc4b-4341fcebf989",
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "name": "Evolution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_URL }}/message/{{ $json.endpoint }}/{{ $env.EVOLUTION_INSTANCE }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 300
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "bfEvolution00001",
+          "name": "BF Evolution apikey"
+        }
+      },
+      "id": "98b030fc-37b8-515c-fe22-c01b09afbd9c",
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "name": "Ids enviados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "// ==== GERADO por scripts/build-workflows.mjs a partir de src/ (sql). Edite em src/ e rode make build. ====\n// ── src/cpf.js ──\n// Validação de CPF e e-mail, máscara para logs (LGPD).\n\nfunction soDigitos(s) {\n  return String(s ?? '').replace(/\\D/g, '');\n}\n\nfunction validarCpf(entrada) {\n  const c = soDigitos(entrada);\n  if (c.length !== 11 || /^(\\d)\\1{10}$/.test(c)) return false;\n  const dv = (n) => {\n    let soma = 0;\n    for (let i = 0; i < n; i++) soma += Number(c[i]) * (n + 1 - i);\n    const r = (soma * 10) % 11;\n    return r === 10 ? 0 : r;\n  };\n  return dv(9) === Number(c[9]) && dv(10) === Number(c[10]);\n}\n\nfunction formatarCpf(entrada) {\n  const c = soDigitos(entrada);\n  return `${c.slice(0, 3)}.${c.slice(3, 6)}.${c.slice(6, 9)}-${c.slice(9)}`;\n}\n\n// 123.456.789-09 -> ***.456.789-**\nfunction mascararCpf(entrada) {\n  const c = soDigitos(entrada);\n  return `***.${c.slice(3, 6)}.${c.slice(6, 9)}-**`;\n}\n\n// Mascara qualquer CPF (com ou sem pontuação) dentro de um texto livre.\nfunction mascararCpfsNoTexto(texto) {\n  return String(texto ?? '').replace(/\\b\\d{3}\\.?\\d{3}\\.?\\d{3}-?\\d{2}\\b/g, (m) => mascararCpf(m));\n}\n\nfunction validarEmail(s) {\n  return /^[^\\s@]+@[^\\s@]+\\.[a-z]{2,}$/i.test(String(s ?? '').trim());\n}\n\n// ── src/sql.js ──\n// Monta o SQL que grava o resultado do core num único statement (CTEs).\n// Literais escapados aqui (standard_conforming_strings=on, padrão do Postgres).\n\n\n\nfunction lit(v) {\n  if (v === null || v === undefined) return 'null';\n  if (typeof v === 'number') return Number.isFinite(v) ? String(v) : 'null';\n  if (typeof v === 'boolean') return v ? 'true' : 'false';\n  if (typeof v === 'object') return `${lit(JSON.stringify(v))}::jsonb`;\n  const s = String(v).replace(/\\0/g, '').replace(/'/g, \"''\");\n  // O node Postgres do n8n formata a query com pg-promise: \"$1\" num texto de cliente viraria\n  // placeholder. Texto com $ vai como U&'' com o $ em \\0024.\n  if (!s.includes('$')) return `'${s}'`;\n  return `U&'${s.replace(/\\\\/g, '\\\\\\\\').replace(/\\$/g, '\\\\0024')}'`;\n}\n\nconst COLUNAS_PEDIDO = ['comprovante_url', 'nome', 'cpf', 'email', 'status'];\n\n// ctx = entrada do core; r = resultado de processar(). Devolve 1 linha: {pedido_id}.\nfunction sqlGravar(ctx, r) {\n  const ctes = [];\n  const { novoPedido, atualizarPedido, novaOferta } = r.efeitos ?? {};\n  const canal = lit(ctx.canal);\n  const contato = lit(ctx.contato_id);\n\n  if (novoPedido) {\n    const p = novoPedido;\n    ctes.push(`np as (insert into app.pedidos (canal, contato_id, evento_id, quantidade, valor_total, forma, status)\n  values (${canal}, ${contato}, ${lit(p.evento_id)}, ${lit(p.quantidade)}, ${lit(p.valor_total)}, ${lit(p.forma)}, ${lit(p.status)}) returning id)`);\n  }\n  if (atualizarPedido?.id) {\n    const sets = COLUNAS_PEDIDO.filter((k) => k in atualizarPedido).map((k) => `${k}=${lit(atualizarPedido[k])}`);\n    ctes.push(`up as (update app.pedidos set ${sets.join(', ')}, atualizado_em=now()\n  where id=${Number(atualizarPedido.id)} and canal=${canal} and contato_id=${contato} and status not in ('aprovado','recusado','cancelado'))`);\n  }\n  if (novaOferta) {\n    const o = novaOferta;\n    ctes.push(`nov as (insert into app.ofertas_venda (canal, contato_id, evento_texto, quantidade, setor, valor_pedido)\n  values (${canal}, ${contato}, ${lit(o.evento_texto)}, ${lit(o.quantidade)}, ${lit(o.setor)}, ${lit(o.valor_pedido)}))`);\n  }\n  const hist = [];\n  const entrada = [ctx.midia ? `[${ctx.midia.tipo}]` : '', ctx.texto ?? ''].filter(Boolean).join(' ');\n  if (entrada) hist.push(['in', entrada]);\n  for (const m of r.mensagens ?? []) hist.push(['out', m.texto ?? m.url ?? '']);\n  if (hist.length) {\n    ctes.push(`h as (insert into app.historico (canal, contato_id, direcao, texto) values\n  ${hist.map(([d, t]) => `(${canal}, ${contato}, ${lit(d)}, ${lit(mascararCpfsNoTexto(t))})`).join(',\\n  ')})`);\n  }\n  const ctxJson = lit(r.contexto ?? {});\n  const ctxFinal = novoPedido ? `${ctxJson} || jsonb_build_object('pedido_id', (select id from np))` : ctxJson;\n  ctes.push(`cv as (insert into app.conversas (canal, contato_id, nome, estado, contexto, pausado_ate, atualizado_em)\n  values (${canal}, ${contato}, ${lit(ctx.nome || null)}, ${lit(r.estado)}, ${ctxFinal}, ${lit(r.pausado_ate)}, now())\n  on conflict (canal, contato_id) do update set nome=coalesce(excluded.nome, app.conversas.nome), estado=excluded.estado,\n  contexto=excluded.contexto, pausado_ate=excluded.pausado_ate, atualizado_em=now())`);\n  return `with ${ctes.join(',\\n')}\\nselect ${novoPedido ? '(select id from np)' : 'null::int'} as pedido_id`;\n}\n\n// Tudo que o core precisa numa ida ao banco: conversa, eventos ativos, textos e config.\nfunction sqlCarregar(canal, contatoId) {\n  return `select\n  (select to_jsonb(c) from app.conversas c where c.canal=${lit(canal)} and c.contato_id=${lit(contatoId)}) as conversa,\n  (select coalesce(jsonb_agg(to_jsonb(e) order by e.data_evento), '[]') from app.eventos e where e.ativo) as eventos,\n  (select coalesce(jsonb_object_agg(chave, texto), '{}') from app.mensagens) as textos,\n  (select coalesce(jsonb_object_agg(chave, valor), '{}') from app.config) as config,\n  now() as agora`;\n}\n// ==== fim do código gerado ====\n\nconst ids = $input.all().map((i) => i.json?.key?.id).filter(Boolean);\nif (!ids.length) return [];\nreturn [{ json: { sql: `insert into app.mensagens_enviadas (id) values ${ids.map((i) => `(${lit(i)})`).join(', ')} on conflict do nothing` } }];\n"
+      },
+      "id": "f2eae84c-ccdb-9da1-94c9-cbd6b12432ad",
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "name": "Gravar ids",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "bfPostgres000001",
+          "name": "BF Postgres"
+        }
+      },
+      "id": "f1a22d31-b7d6-00e9-8a4c-7583c4c980f2",
+      "position": [
+        880,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Entrada": {
+      "main": [
+        [
+          {
+            "node": "Montar chamadas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar chamadas": {
+      "main": [
+        [
+          {
+            "node": "Evolution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evolution": {
+      "main": [
+        [
+          {
+            "node": "Ids enviados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ids enviados": {
+      "main": [
+        [
+          {
+            "node": "Gravar ids",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Bahia",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "bf99erros0000001"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

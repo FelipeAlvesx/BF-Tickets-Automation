@@ -1,0 +1,107 @@
+# BRIEF — Bot de Atendimento BF Tickets (WhatsApp + Instagram) · n8n + Docker (local)
+
+## 0. Regras para você (Claude Code)
+- Construa **por fases** (seção 9). Ao fim de cada fase: rode os testes, diga em 3–5 linhas o que ficou pronto e siga.
+- **Economia de tokens:** não imprima arquivos inteiros no chat, não repita este brief, não explique o óbvio. Leia só os trechos que precisar.
+- **Antes de usar uma API externa** (Evolution, ManyChat, n8n CLI), confira a doc atual (versão, nome da imagem Docker, endpoints e payloads). Não confie na memória.
+- Pergunte **somente** se estiver bloqueado. No resto, decida pelo mais simples e registre a decisão em `docs/DECISOES.md` (1 linha cada).
+- Fixe as versões das imagens Docker (nada de `latest`). Todo segredo fica no `.env`, e o repositório só leva o `.env.example`.
+
+## 1. Contexto
+BF Tickets vende ingressos oficiais (link próprio de venda), compra ingressos de terceiros e revende.
+Objetivo: automatizar 1 grupo de WhatsApp (mensagens agendadas) e o atendimento no privado (WhatsApp + Instagram DM), além de lembrar o dono de postar stories.
+Fuso: **America/Bahia**. Idioma do bot: PT-BR, tom informal, curto e com poucos emojis.
+
+## 2. Escopo funcional
+1. **Grupo WhatsApp (1 grupo):** cerca de 10 mensagens por dia nos horários da tabela `agenda`, com texto e imagem opcional e variáveis do evento (`{nome}`, `{data}`, `{link}`, `{preco}`).
+2. **Lembrete de story (manual, sem API do IG):** quando a linha da agenda tem `lembrete_story=true`, o bot envia ao **número do admin** a arte, a legenda pronta e o link sozinho numa mensagem separada (fácil de copiar). O dono posta o story com o sticker de link manualmente.
+3. **Atendimento no privado (WhatsApp e IG, mesma lógica):**
+   - Pedido de ingresso → identifica o evento e a quantidade → pergunta "link ou Pix?".
+   - **Link:** envia `link_compra` do evento. Fim.
+   - **Pix:** envia o resumo (evento, quantidade, valor total), depois a **chave Pix numa mensagem isolada** e pede o comprovante.
+   - Ao receber o comprovante (imagem ou PDF) → encaminha ao admin com o resumo do pedido → pede os dados do cliente: **nome completo, CPF e e-mail**, validando o dígito do CPF e o formato do e-mail.
+   - O status passa a `aguardando_validacao`. **A validação é manual:** o admin responde `/aprovar <id>` ou `/recusar <id> [motivo]`, e o bot avisa o cliente.
+   - **"Quero vender meu ingresso":** coleta evento, quantidade, setor e valor pedido → registra em `ofertas_venda` → avisa o admin → diz ao cliente que um humano vai responder.
+   - **Dúvidas** (data, local, preço): responde só com os dados da tabela `eventos`. Se não souber → passa para humano.
+   - **"Falar com atendente"** ou baixa confiança 2 vezes seguidas → pausa o bot naquele chat e avisa o admin.
+4. **Comandos do admin** (só aceitos do `ADMIN_NUMERO`, enviados ao número do bot): `/aprovar id`, `/recusar id motivo`, `/pedidos` (pendentes), `/pausar tel`, `/retomar tel`, `/eventos`, `/ajuda`.
+5. **Assumir conversa (handoff):** se alguém responder manualmente pelo celular do bot (mensagem `fromMe` cujo id **não** está em `mensagens_enviadas`), o bot pausa aquele chat por `PAUSA_HUMANO_HORAS` (padrão 12).
+
+Fora do escopo agora: Pix dinâmico, emissão automática de ingresso, publicação automática de story.
+
+## 3. Arquitetura
+```
+docker-compose (local; depois o mesmo arquivo vai para a VPS)
+├── postgres      → banco único (schemas: evolution, n8n, app)
+├── redis         → cache da Evolution + debounce
+├── evolution-api → WhatsApp via QR (Baileys), número dedicado
+├── n8n           → orquestração (GENERIC_TIMEZONE=America/Bahia)
+├── nocodb        → painel tipo planilha sobre o schema app (o dono edita eventos/agenda/pedidos)
+└── cloudflared   → (perfil dev) túnel público para o webhook do ManyChat
+Instagram DM: ManyChat Pro → External Request → webhook n8n → resposta no formato Dynamic Block v2 (type instagram)
+LLM: OpenAI-compatible, modelo barato configurável (LLM_MODEL), só para classificar/extrair
+```
+
+## 4. Decisões técnicas (obrigatórias)
+- **Máquina de estados determinística + LLM só como extrator.** Nada de "AI Agent" livre. O LLM recebe a mensagem, o estado atual e a lista de eventos ativos (id+nome) e devolve **apenas JSON**: `{intencao, evento_id, quantidade, nome, cpf, email, confianca}` com `temperature=0` e prompt curto em `prompts/extrator.md`. Preço, link, chave e textos vêm **sempre do banco**; o LLM nunca escreve valores.
+- **Atalhos sem LLM:** use regex/keywords para comandos, números, CPF, e-mail e "1/2" de menus. Chame o LLM só quando o texto livre for ambíguo. Isso economiza custo.
+- **Núcleo agnóstico de canal:** o sub-workflow `core` recebe `{canal, contato_id, nome, texto, midia}` e devolve `{mensagens:[{tipo,texto|url}], acoes:[]}`. Os adaptadores de WhatsApp e IG só convertem os formatos.
+- **Lógica testável:** as regras de negócio (estados, validação de CPF, renderização de templates, parsing de comandos) ficam em JS puro em `src/`, com testes `node:test`. O script `scripts/build-workflows.mjs` injeta esse código nos Code nodes dos JSONs em `n8n/workflows/`. Há poucos nodes por workflow.
+- **Idempotência:** `mensagens_processadas(id PK)` impede processar o mesmo webhook duas vezes; `envios_agenda(agenda_id, data) UNIQUE` impede repetir envio no grupo.
+- **Debounce de 6 s** por contato (Redis ou Postgres): junta mensagens enviadas em sequência antes de processar.
+- **Anti-ban (WhatsApp):** presença "digitando" + atraso proporcional ao tamanho do texto (1–4 s); jitter aleatório de 0–60 s nos envios do grupo; o bot nunca inicia conversa no privado, só responde; no máximo cerca de 10 mensagens por dia no grupo.
+- **LGPD:** CPF fica só em `pedidos`, mascarado em logs e alertas (`***.456.789-**`). Nos dados de execução do n8n, guardar só erros (`EXECUTIONS_DATA_SAVE_ON_SUCCESS=none`).
+- **Integração com Evolution via HTTP Request** (sem community node), com URL e API key vindas de credencial do n8n.
+- **Erros:** um workflow com Error Trigger envia alerta curto ao admin.
+
+## 5. Banco (schema `app`) — `db/init.sql` com seed de exemplo
+- `config(chave PK, valor)`: pix_chave, pix_titular, pix_banco, admin_numero, grupo_jid, pausa_humano_horas
+- `eventos(id, nome, data_evento timestamptz, local, link_compra, preco numeric, imagem_url, ativo bool)`
+- `agenda(id, horario time, dias_semana int[] default {0..6}, texto, imagem_url, evento_id null, enviar_grupo bool, lembrete_story bool, ativo bool)`
+- `conversas(canal, contato_id, nome, estado, contexto jsonb, pausado_ate, atualizado_em, PK(canal,contato_id))`
+- `pedidos(id serial, canal, contato_id, evento_id, quantidade, valor_total, forma, status, comprovante_url, nome, cpf, email, motivo_recusa, criado_em, atualizado_em)`
+  status: `aguardando_comprovante | coletando_dados | aguardando_validacao | aprovado | recusado | cancelado`
+- `ofertas_venda(id, canal, contato_id, evento_texto, quantidade, setor, valor_pedido, status, criado_em)`
+- `mensagens(chave PK, texto)`: **todos os textos do bot** são editáveis no NocoDB (boas-vindas, pedir_qtd, pix_instrucao, pedir_nome, …)
+- `mensagens_processadas(id PK, criado_em)`, `mensagens_enviadas(id PK, criado_em)`, `envios_agenda(agenda_id, data, UNIQUE)`
+Seed: 2 eventos fictícios, 10 linhas de agenda (3 com lembrete_story), todos os textos padrão.
+
+## 6. Estados da conversa
+`inicio → escolhendo_evento → escolhendo_qtd → escolhendo_pagamento → (link: fim) | (pix: aguardando_comprovante → coletando_nome → coletando_cpf → coletando_email → aguardando_validacao → fim)`
+Ramos: `venda_coletando` (quer vender), `humano` (pausado).
+Intenções globais, aceitas em qualquer estado: cancelar/recomeçar, falar com humano, listar eventos, dúvida.
+Se houver um único evento ativo, pula `escolhendo_evento`. Contexto sem atividade por 24 h → volta para `inicio`.
+
+## 7. Workflows n8n (`n8n/workflows/`)
+1. `01-agenda.json`: Schedule a cada 1 min → busca as linhas da agenda vencidas e não enviadas hoje → grupo e/ou lembrete de story ao admin → grava `envios_agenda`.
+2. `02-entrada-whatsapp.json`: webhook da Evolution (`MESSAGES_UPSERT`) → normaliza → dedupe → ignora grupos e status → se for admin, vai para comandos; se for `fromMe` humano, pausa → debounce → `core` → envia (com presença) → grava ids enviados.
+3. `03-entrada-instagram.json`: webhook do ManyChat → normaliza → `core` → responde no JSON Dynamic Block v2 (inclusive com `actions` para setar o campo `estado` no ManyChat).
+4. `04-core.json`: sub-workflow (Execute Workflow Trigger). Estado + atalhos + LLM → próxima ação → mensagens.
+5. `05-admin.json`: comandos do admin.
+6. `99-erros.json`: Error Trigger → alerta ao admin.
+
+**Comprovante no IG:** confirme na doc do ManyChat como receber um anexo pelo External Request. Fallback: quando `estado=aguardando_comprovante`, o fluxo do ManyChat usa um bloco *User Input (imagem)* que salva `{{comprovante_url}}` e chama o webhook de novo. Documente isso em `manychat/SETUP.md` com prints em texto (passo a passo).
+
+## 8. Estrutura do repositório
+```
+docker-compose.yml  .env.example  Makefile (up, down, logs, import, test, backup)
+db/init.sql
+src/            (estados.js, cpf.js, templates.js, comandos.js, extrator.js) + src/*.test.js
+prompts/extrator.md
+scripts/        build-workflows.mjs, import-workflows.sh (n8n CLI), listar-grupos.sh (pega o grupo_jid via Evolution), simular.sh (POST de payloads fake)
+tests/fixtures/ (payloads Evolution e ManyChat: texto, imagem, pdf, fromMe, grupo, admin)
+n8n/workflows/*.json
+manychat/SETUP.md
+docs/SETUP.md (do zero: subir, parear QR, achar grupo, importar, configurar), docs/DEPLOY_VPS.md (domínio, HTTPS via Caddy, backup diário do Postgres, firewall), docs/DECISOES.md
+```
+
+## 9. Fases e critérios de aceite
+1. **Infra:** `make up` sobe tudo com healthcheck; o NocoDB mostra as tabelas com o seed; a Evolution gera o QR. ✅ quando os containers estiverem healthy.
+2. **Lógica pura:** `src/` + testes (`npm test` verde). Cobrir: todas as transições, CPF válido/inválido, e-mail, templates, comandos, intenções globais.
+3. **WhatsApp privado + admin:** `simular.sh` percorre o fluxo Pix completo e o fluxo de link; dedupe, debounce, pausa por humano e `/aprovar` funcionando.
+4. **Agenda + lembrete de story:** com o relógio simulado (linha de agenda para now+1 min), envia 1 vez só, aplica jitter e não duplica.
+5. **Instagram via ManyChat:** os fixtures retornam JSON v2 válido; túnel cloudflared documentado.
+6. **Docs + build final:** `docs/SETUP.md` permite que um leigo suba tudo em menos de 30 min; `build-workflows` + `import` são idempotentes.
+
+## 10. Variáveis (.env.example)
+`POSTGRES_*, REDIS_*, EVOLUTION_API_KEY, EVOLUTION_INSTANCE, N8N_ENCRYPTION_KEY, N8N_HOST, WEBHOOK_URL, GENERIC_TIMEZONE=America/Bahia, LLM_BASE_URL, LLM_API_KEY, LLM_MODEL, ADMIN_NUMERO, PAUSA_HUMANO_HORAS=12, DEBOUNCE_SEGUNDOS=6`

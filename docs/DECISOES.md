@@ -1,0 +1,26 @@
+# Decisões (1 linha cada)
+
+- 2026-11-12 · Imagens fixas e conferidas na doc/registries: `evoapicloud/evolution-api:v2.3.7` (a `atendai/*` não existe mais), `n8nio/n8n:2.45.5`, `nocodb/nocodb:2026.10.1`, `postgres:17.11-alpine`, `redis:7.4.12-alpine`, `cloudflare/cloudflared:2026.10.5`, `node:24.22.1-alpine`.
+- 2026-11-12 · Banco único `bf` com schemas `evolution`, `n8n`, `app`; o NocoDB guarda o meta dele no database `nocodb` do mesmo Postgres e lê o schema `app` como fonte externa (`make nocodb`).
+- 2026-11-12 · Debounce no Postgres (tabela `app.debounce` + Wait do n8n), não no Redis: uma credencial a menos; o Redis fica só como cache da Evolution.
+- 2026-11-12 · Workflows gerados por `scripts/build-workflows.mjs` (topologia + código de `src/` injetado nos Code nodes, ids fixos): build e import são determinísticos e idempotentes.
+- 2026-11-12 · Toda escrita do core vai num único SQL com CTEs (`src/sql.js`), com literais escapados; texto com `$` vira `U&''` porque o node Postgres do n8n formata com pg-promise.
+- 2026-11-12 · Workflow extra `06-enviar.json`: um só lugar envia pela Evolution (presença "digitando" via `delay` de 1–4 s) e grava `mensagens_enviadas`; core, admin, agenda e erros usam ele.
+- 2026-11-12 · O core avisa o admin (comprovante, validar, atendente, venda); os adaptadores só convertem formato.
+- 2026-11-12 · A Evolution não devolve como `fromMe` o que a API envia (emitOwnEvents=false): todo `fromMe` no webhook é humano no celular → pausa o chat. `mensagens_enviadas` fica como trava extra.
+- 2026-11-12 · `$env` liberado no n8n (`N8N_BLOCK_ENV_ACCESS_IN_NODE=false`) só para valores não secretos (URL da Evolution, modelo, debounce); chaves ficam em credenciais do n8n.
+- 2026-11-12 · Task runner do n8n em modo interno (padrão da 2.45): sem container extra; trocar para `external` quando a 3.0 remover o interno.
+- 2026-11-12 · `EXECUTIONS_DATA_SAVE_ON_SUCCESS=none`: o n8n marca a execução com `deletedAt` e o pruning apaga de vez em até 1 h; só erros ficam (7 dias).
+- 2026-11-12 · LLM só quando o atalho (regex/keywords) não resolve e só nos estados de texto livre; nome, CPF e e-mail nunca passam pelo LLM. LLM fora do ar = baixa confiança (2x → humano).
+- 2026-11-12 · CPF inteiro só em `pedidos.cpf`; contexto da conversa guarda só `cpf_mascarado`; `historico` e alertas passam por `mascararCpfsNoTexto`.
+- 2026-11-12 · Tabela `app.historico` (não pedida no brief) para o painel mostrar as conversas; CPF mascarado antes de gravar.
+- 2026-11-12 · Instagram sem debounce e sem dedupe: o ManyChat espera a resposta síncrona e não manda id de mensagem.
+- 2026-11-12 · `/aprovar` no Instagram avisa o cliente pela API `sendContent` do ManyChat (MANYCHAT_API_KEY); só funciona dentro da janela de 24 h do Instagram.
+- 2026-11-12 · Webhook do ManyChat e do painel protegidos por header (`x-bf-token`, `x-painel-token`) via credencial Header Auth do n8n.
+- 2026-11-12 · Mídia fora de `aguardando_comprovante` (print, segundo comprovante) vai para humano com o anexo encaminhado ao admin.
+- 2026-11-12 · Agenda: o INSERT em `envios_agenda` reivindica a linha antes do envio (UNIQUE agenda_id+data) e só vale numa janela de 15 min, para não despejar a manhã inteira depois de uma queda.
+- 2026-11-12 · Painel próprio (`painel/`) no padrão do helena-painel (React + Vite + Tailwind + framer-motion), servido por uma API Node + pg numa porta só, atrás de Basic Auth; NocoDB continua para edição crua.
+- 2026-11-12 · Painel lê o Postgres direto; aprovar/recusar passa pelo n8n (`/webhook/painel-admin`) para reaproveitar o mesmo texto e o mesmo aviso ao cliente do comando `/aprovar`.
+- 2026-11-12 · Resposta manual pelo painel registra no histórico e pausa o bot no chat (a Evolution não gera o eco `fromMe` para envios pela API).
+- 2026-11-12 · Comprovante do WhatsApp guardado como `wa:<id>`: o painel busca a mídia na Evolution (`getBase64FromMediaMessage`), nada de arquivo em disco.
+- 2026-11-12 · `simular.sh` usa uma Evolution falsa (`tests/mock-evolution.mjs`) e debounce de 1 s; no fim devolve o n8n para a Evolution real.

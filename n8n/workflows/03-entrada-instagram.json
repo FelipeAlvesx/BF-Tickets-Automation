@@ -1,0 +1,159 @@
+{
+  "id": "bf03instagram001",
+  "name": "03 · Entrada Instagram (ManyChat)",
+  "active": false,
+  "nodes": [
+    {
+      "name": "ManyChat",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "9eed9b41-012a-742e-4652-ae478ea30f84",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "manychat",
+        "responseMode": "responseNode",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "bfManychatHook01",
+          "name": "BF ManyChat webhook"
+        }
+      },
+      "id": "6aa6a42f-f164-1765-9dc2-636fc6d36d94",
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "name": "Normalizar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "// ==== GERADO por scripts/build-workflows.mjs a partir de src/ (canais). Edite em src/ e rode make build. ====\n// ── src/canais.js ──\n// Adaptadores: Evolution (WhatsApp) e ManyChat (Instagram) <-> formato do core.\n// Mensagem do core: {tipo:'texto', texto} | {tipo:'imagem'|'documento', url?|base64?, texto?, mimetype?, fileName?}\n\n// Webhook messages.upsert da Evolution v2 -> {id, contato_id, nome, texto, midia, fromMe} ou null (ignorar).\n// Mensagens enviadas pela API não voltam aqui (emitOwnEvents=false): fromMe = alguém digitou no celular.\nfunction normalizarEvolution(body) {\n  if (!body || body.event !== 'messages.upsert') return null;\n  const d = Array.isArray(body.data) ? body.data[0] : body.data;\n  const key = d?.key ?? {};\n  const jid = key.remoteJidAlt && String(key.remoteJid).endsWith('@lid') ? key.remoteJidAlt : key.remoteJid;\n  if (!jid || !key.id) return null;\n  if (/@(g\\.us|broadcast|newsletter)$/.test(jid)) return null; // grupos, status, canais\n  const m = d.message ?? {};\n  const texto = m.conversation ?? m.extendedTextMessage?.text ?? m.imageMessage?.caption ?? m.documentMessage?.caption\n    ?? m.documentWithCaptionMessage?.message?.documentMessage?.caption ?? m.buttonsResponseMessage?.selectedDisplayText\n    ?? m.listResponseMessage?.title ?? '';\n  let midia = null;\n  const doc = m.documentMessage ?? m.documentWithCaptionMessage?.message?.documentMessage;\n  if (m.imageMessage) midia = { tipo: 'imagem', mimetype: m.imageMessage.mimetype ?? 'image/jpeg' };\n  else if (doc) midia = { tipo: 'documento', mimetype: doc.mimetype ?? '', fileName: doc.fileName ?? 'arquivo' };\n  else if (m.audioMessage || m.videoMessage || m.stickerMessage) midia = { tipo: m.audioMessage ? 'audio' : m.videoMessage ? 'video' : 'sticker' };\n  if (midia) {\n    midia.ref = `wa:${key.id}`;\n    if (m.base64) midia.base64 = m.base64;\n  }\n  if (!texto && !midia) return null; // reação, protocolo, enquete...\n  return {\n    id: key.id,\n    contato_id: String(jid).split('@')[0],\n    nome: key.fromMe ? null : d.pushName || null,\n    texto: String(texto).trim(),\n    midia,\n    fromMe: !!key.fromMe,\n  };\n}\n\n// Mensagens do core -> chamadas da Evolution. `numero` = dígitos ou JID de grupo.\n// O `delay` da Evolution mostra \"digitando...\" antes de enviar (anti-ban: 1–4 s pelo tamanho).\nfunction chamadasEvolution(numero, mensagens) {\n  return (mensagens ?? []).map((m) => {\n    const delay = atrasoDigitando(m.texto);\n    if (m.tipo === 'texto') return { endpoint: 'sendText', body: { number: numero, text: m.texto, delay } };\n    const mediatype = m.tipo === 'imagem' ? 'image' : 'document';\n    const body = { number: numero, mediatype, media: m.base64 ?? m.url, caption: m.texto ?? '', delay };\n    if (m.mimetype) body.mimetype = m.mimetype;\n    if (mediatype === 'document') body.fileName = m.fileName ?? 'comprovante.pdf';\n    return { endpoint: 'sendMedia', body };\n  });\n}\n\nfunction atrasoDigitando(texto) {\n  return Math.min(4000, Math.max(1000, 1000 + String(texto ?? '').length * 25));\n}\n\n// Corpo do External Request do ManyChat (ver manychat/SETUP.md). Aceita o corpo montado\n// ({contato_id, nome, texto, comprovante_url}) e o \"Full Contact Data\" ({id, name, last_input_text, custom_fields}).\nfunction normalizarManychat(body) {\n  const b = body ?? {};\n  const contato = String(b.contato_id ?? b.id ?? '').trim();\n  if (!contato) return null;\n  let texto = String(b.texto ?? b.last_input_text ?? '').trim();\n  const url = String(b.comprovante_url ?? b.custom_fields?.comprovante_url ?? '').trim() || (/^https?:\\/\\/\\S+$/.test(texto) && /cdn|fbsbx|lookaside|instagram/.test(texto) ? texto : '');\n  if (url && url === texto) texto = '';\n  return {\n    contato_id: contato,\n    nome: String(b.nome ?? b.name ?? '').trim() || null,\n    texto,\n    midia: url ? { tipo: /\\.pdf(\\?|$)/i.test(url) ? 'documento' : 'imagem', url, mimetype: /\\.pdf(\\?|$)/i.test(url) ? 'application/pdf' : 'image/jpeg' } : null,\n  };\n}\n\n// Resposta Dynamic Block v2 (Instagram): até 10 mensagens; só texto e imagem.\n// A action grava o estado no campo `estado` do ManyChat (o fluxo usa para pedir o comprovante).\nfunction respostaManychat(mensagens, estado) {\n  const msgs = (mensagens ?? []).flatMap((m) => {\n    if (m.tipo === 'imagem' && m.url) return [{ type: 'image', url: m.url }, ...(m.texto ? [{ type: 'text', text: m.texto }] : [])];\n    return m.texto ? [{ type: 'text', text: m.texto }] : [];\n  }).slice(0, 10);\n  const content = { type: 'instagram', messages: msgs, actions: [], quick_replies: [] };\n  if (estado) {\n    content.actions.push({ action: 'set_field_value', field_name: 'estado', value: estado });\n    content.actions.push({ action: 'unset_field_value', field_name: 'comprovante_url' }); // já foi lido; não reenviar\n  }\n  return { version: 'v2', content };\n}\n\n// Corpo do sendContent da API do ManyChat (aviso de /aprovar e /recusar no Instagram).\nfunction sendContentManychat(subscriberId, mensagens) {\n  const { content } = respostaManychat(mensagens, null);\n  delete content.actions;\n  delete content.quick_replies;\n  return { subscriber_id: Number(subscriberId), data: { version: 'v2', content } };\n}\n// ==== fim do código gerado ====\n\nconst m = normalizarManychat($input.first().json.body);\nif (!m) throw new Error('ManyChat sem contato_id: confira o corpo do External Request (manychat/SETUP.md)');\nreturn [{ json: { canal: 'instagram', ...m } }];\n"
+      },
+      "id": "84740924-6d42-ff6a-1ec0-fdfdc98d627d",
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "name": "Core",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "bf04core00000001",
+          "mode": "id"
+        },
+        "mode": "once",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "7ea2107e-49d9-2519-a32e-7f5fd386187c",
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "name": "Resposta v2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "// ==== GERADO por scripts/build-workflows.mjs a partir de src/ (canais). Edite em src/ e rode make build. ====\n// ── src/canais.js ──\n// Adaptadores: Evolution (WhatsApp) e ManyChat (Instagram) <-> formato do core.\n// Mensagem do core: {tipo:'texto', texto} | {tipo:'imagem'|'documento', url?|base64?, texto?, mimetype?, fileName?}\n\n// Webhook messages.upsert da Evolution v2 -> {id, contato_id, nome, texto, midia, fromMe} ou null (ignorar).\n// Mensagens enviadas pela API não voltam aqui (emitOwnEvents=false): fromMe = alguém digitou no celular.\nfunction normalizarEvolution(body) {\n  if (!body || body.event !== 'messages.upsert') return null;\n  const d = Array.isArray(body.data) ? body.data[0] : body.data;\n  const key = d?.key ?? {};\n  const jid = key.remoteJidAlt && String(key.remoteJid).endsWith('@lid') ? key.remoteJidAlt : key.remoteJid;\n  if (!jid || !key.id) return null;\n  if (/@(g\\.us|broadcast|newsletter)$/.test(jid)) return null; // grupos, status, canais\n  const m = d.message ?? {};\n  const texto = m.conversation ?? m.extendedTextMessage?.text ?? m.imageMessage?.caption ?? m.documentMessage?.caption\n    ?? m.documentWithCaptionMessage?.message?.documentMessage?.caption ?? m.buttonsResponseMessage?.selectedDisplayText\n    ?? m.listResponseMessage?.title ?? '';\n  let midia = null;\n  const doc = m.documentMessage ?? m.documentWithCaptionMessage?.message?.documentMessage;\n  if (m.imageMessage) midia = { tipo: 'imagem', mimetype: m.imageMessage.mimetype ?? 'image/jpeg' };\n  else if (doc) midia = { tipo: 'documento', mimetype: doc.mimetype ?? '', fileName: doc.fileName ?? 'arquivo' };\n  else if (m.audioMessage || m.videoMessage || m.stickerMessage) midia = { tipo: m.audioMessage ? 'audio' : m.videoMessage ? 'video' : 'sticker' };\n  if (midia) {\n    midia.ref = `wa:${key.id}`;\n    if (m.base64) midia.base64 = m.base64;\n  }\n  if (!texto && !midia) return null; // reação, protocolo, enquete...\n  return {\n    id: key.id,\n    contato_id: String(jid).split('@')[0],\n    nome: key.fromMe ? null : d.pushName || null,\n    texto: String(texto).trim(),\n    midia,\n    fromMe: !!key.fromMe,\n  };\n}\n\n// Mensagens do core -> chamadas da Evolution. `numero` = dígitos ou JID de grupo.\n// O `delay` da Evolution mostra \"digitando...\" antes de enviar (anti-ban: 1–4 s pelo tamanho).\nfunction chamadasEvolution(numero, mensagens) {\n  return (mensagens ?? []).map((m) => {\n    const delay = atrasoDigitando(m.texto);\n    if (m.tipo === 'texto') return { endpoint: 'sendText', body: { number: numero, text: m.texto, delay } };\n    const mediatype = m.tipo === 'imagem' ? 'image' : 'document';\n    const body = { number: numero, mediatype, media: m.base64 ?? m.url, caption: m.texto ?? '', delay };\n    if (m.mimetype) body.mimetype = m.mimetype;\n    if (mediatype === 'document') body.fileName = m.fileName ?? 'comprovante.pdf';\n    return { endpoint: 'sendMedia', body };\n  });\n}\n\nfunction atrasoDigitando(texto) {\n  return Math.min(4000, Math.max(1000, 1000 + String(texto ?? '').length * 25));\n}\n\n// Corpo do External Request do ManyChat (ver manychat/SETUP.md). Aceita o corpo montado\n// ({contato_id, nome, texto, comprovante_url}) e o \"Full Contact Data\" ({id, name, last_input_text, custom_fields}).\nfunction normalizarManychat(body) {\n  const b = body ?? {};\n  const contato = String(b.contato_id ?? b.id ?? '').trim();\n  if (!contato) return null;\n  let texto = String(b.texto ?? b.last_input_text ?? '').trim();\n  const url = String(b.comprovante_url ?? b.custom_fields?.comprovante_url ?? '').trim() || (/^https?:\\/\\/\\S+$/.test(texto) && /cdn|fbsbx|lookaside|instagram/.test(texto) ? texto : '');\n  if (url && url === texto) texto = '';\n  return {\n    contato_id: contato,\n    nome: String(b.nome ?? b.name ?? '').trim() || null,\n    texto,\n    midia: url ? { tipo: /\\.pdf(\\?|$)/i.test(url) ? 'documento' : 'imagem', url, mimetype: /\\.pdf(\\?|$)/i.test(url) ? 'application/pdf' : 'image/jpeg' } : null,\n  };\n}\n\n// Resposta Dynamic Block v2 (Instagram): até 10 mensagens; só texto e imagem.\n// A action grava o estado no campo `estado` do ManyChat (o fluxo usa para pedir o comprovante).\nfunction respostaManychat(mensagens, estado) {\n  const msgs = (mensagens ?? []).flatMap((m) => {\n    if (m.tipo === 'imagem' && m.url) return [{ type: 'image', url: m.url }, ...(m.texto ? [{ type: 'text', text: m.texto }] : [])];\n    return m.texto ? [{ type: 'text', text: m.texto }] : [];\n  }).slice(0, 10);\n  const content = { type: 'instagram', messages: msgs, actions: [], quick_replies: [] };\n  if (estado) {\n    content.actions.push({ action: 'set_field_value', field_name: 'estado', value: estado });\n    content.actions.push({ action: 'unset_field_value', field_name: 'comprovante_url' }); // já foi lido; não reenviar\n  }\n  return { version: 'v2', content };\n}\n\n// Corpo do sendContent da API do ManyChat (aviso de /aprovar e /recusar no Instagram).\nfunction sendContentManychat(subscriberId, mensagens) {\n  const { content } = respostaManychat(mensagens, null);\n  delete content.actions;\n  delete content.quick_replies;\n  return { subscriber_id: Number(subscriberId), data: { version: 'v2', content } };\n}\n// ==== fim do código gerado ====\n\nconst r = $input.first().json;\nreturn [{ json: respostaManychat(r.mensagens, r.estado) }];\n"
+      },
+      "id": "3433782b-751a-23fe-5a59-1e2b5c624f0a",
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "name": "Responder",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "64755de1-87f0-d606-f727-a59f15b1e269",
+      "position": [
+        880,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "ManyChat": {
+      "main": [
+        [
+          {
+            "node": "Normalizar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar": {
+      "main": [
+        [
+          {
+            "node": "Core",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Core": {
+      "main": [
+        [
+          {
+            "node": "Resposta v2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resposta v2": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Bahia",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "bf99erros0000001"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

@@ -1,0 +1,122 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Tokens neutros do painel. A marca da clínica (src/lib/brand.ts) sobrescreve --brand*,
+   --chart-*, as fontes e, com `fundo`, o tom do papel. HSL sem o hsl(): o Tailwind põe o alfa. */
+@layer base {
+  :root {
+    --background: 36 22% 97%;
+    --surface: 0 0% 100%;
+    --surface-2: 36 16% 94.5%;
+    --surface-3: 36 12% 90%;
+    --foreground: 250 12% 11%;
+    --muted: 250 5% 38%;
+    --faint: 250 4% 56%;
+    --border: 36 10% 87%;
+    --ring: 14 82% 48%;
+    --shadow: 250 30% 12%;
+
+    --brand: 14 82% 48%;
+    --brand-foreground: 0 0% 100%;
+    --brand-soft: 14 82% 95%;
+    --brand-ink: 14 76% 38%;
+    --brand-2: 38 95% 52%;
+
+    --amber: 34 92% 42%;
+    --blue: 214 72% 46%;
+    --green: 152 56% 34%;
+    --red: 356 70% 48%;
+    --violet: 262 52% 50%;
+    --slate: 220 9% 52%;
+
+    --chart-1: 14 82% 48%;
+    --chart-2: 322 63% 42%;
+    --chart-3: 174 58% 34%;
+    --chart-4: 34 92% 48%;
+    --chart-5: 214 72% 50%;
+
+    --font-display: 'Bricolage Grotesque';
+    --font-body: 'Inter';
+    --display-weight: 600;
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+    --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+    color-scheme: light;
+  }
+
+  [data-theme='dark'] {
+    --background: 250 10% 7%;
+    --surface: 250 9% 10%;
+    --surface-2: 250 8% 13%;
+    --surface-3: 250 7% 17%;
+    --foreground: 36 14% 94%;
+    --muted: 250 6% 68%;
+    --faint: 250 5% 52%;
+    --border: 250 7% 19%;
+    --shadow: 250 40% 2%;
+    --brand-soft: 14 40% 16%;
+    --brand-ink: 14 90% 72%;
+    color-scheme: dark;
+  }
+
+  html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+  body {
+    @apply bg-background text-foreground font-sans text-base;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+  ::selection { background: hsl(var(--brand) / 0.18); }
+  :focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; border-radius: 8px; }
+  button, a { -webkit-tap-highlight-color: transparent; }
+  .font-display { font-weight: var(--display-weight); letter-spacing: -0.01em; }
+  .tabular { font-variant-numeric: tabular-nums; }
+
+  * { scrollbar-width: thin; scrollbar-color: hsl(var(--surface-3)) transparent; }
+}
+
+@layer components {
+  /* Superfícies: no máximo três pesos no painel inteiro. */
+  .panel { @apply rounded-2xl bg-surface shadow-hair; }
+  .panel-quiet { @apply rounded-2xl bg-surface-2; }
+
+  /* Botão: aperto de 0,97 confirma o clique; sem `transition: all`. */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-3.5 h-10 text-sm font-medium select-none
+           disabled:opacity-50 disabled:pointer-events-none;
+    transition: transform 160ms var(--ease-out), background-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary { @apply btn bg-brand text-brand-foreground shadow-lift; }
+  .btn-quiet { @apply btn bg-surface-2 text-foreground; }
+  .btn-ghost { @apply btn bg-transparent text-muted; }
+  .btn-danger { @apply btn bg-red/10 text-red; }
+  .btn-sm { @apply h-8 px-2.5 rounded-lg; }
+  @media (hover: hover) and (pointer: fine) {
+    .btn-primary:hover { background: hsl(var(--brand) / 0.92); }
+    .btn-quiet:hover { background: hsl(var(--surface-3)); }
+    .btn-ghost:hover { @apply text-foreground bg-surface-2; }
+    .btn-danger:hover { background: hsl(var(--red) / 0.16); }
+  }
+
+  .field {
+    @apply w-full rounded-xl bg-surface-2 px-3 h-10 text-sm text-foreground placeholder:text-faint outline-none;
+    transition: box-shadow 160ms ease, background-color 160ms ease;
+  }
+  .field:focus { box-shadow: 0 0 0 2px hsl(var(--brand) / 0.35); background: hsl(var(--surface)); }
+  textarea.field { @apply h-auto py-2.5 leading-relaxed; }
+
+  .label { @apply text-micro uppercase text-faint font-medium; }
+  .chip { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 h-6 text-[0.8rem] font-medium whitespace-nowrap; }
+}
+
+/* Reduzir movimento: some o deslocamento, fica a opacidade (que ajuda a entender a troca). */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Troca de tema com a View Transitions API: um círculo que abre a partir do botão. */
+::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
