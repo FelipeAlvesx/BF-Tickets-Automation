@@ -26,7 +26,7 @@ export interface ConversaDetalhe {
 export interface Evento { id: number; nome: string; data_evento: string; local: string | null; link_compra: string | null; preco: string; imagem_url: string | null; ativo: boolean }
 export interface LinhaAgenda {
   id: number; horario: string; dias_semana: number[]; texto: string; imagem_url: string | null; evento_id: number | null
-  enviar_grupo: boolean; lembrete_story: boolean; ativo: boolean; evento: string | null; enviado_hoje: boolean
+  enviar_grupo: boolean; lembrete_story: boolean; ativo: boolean; evento: string | null; evento_ativo: boolean | null; evento_passou: boolean | null; enviado_hoje: boolean
 }
 export interface Oferta { id: number; canal: Canal; contato_id: string; evento_texto: string; quantidade: number; setor: string; valor_pedido: string; status: string; criado_em: string }
 export interface Sistema {

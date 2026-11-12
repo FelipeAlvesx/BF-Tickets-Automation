@@ -17,3 +17,7 @@ export const STATUS_OFERTA: Record<string, [string, string]> = {
 }
 export const DIAS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb']
 export const contato = (canal: string, id: string) => (canal === 'instagram' ? `IG ${id}` : id)
+
+/** Linha ligada a evento desligado ou já encerrado não é enviada (mesma regra do servidor). */
+export const eventoBloqueia = (a: { evento_id: number | null; evento_ativo: boolean | null; evento_passou: boolean | null }) =>
+  !!a.evento_id && (!a.evento_ativo || !!a.evento_passou)

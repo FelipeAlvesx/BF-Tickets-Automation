@@ -6,10 +6,10 @@ import { Page, PageHeader } from '@/components/Page'
 import { Chip, Empty, HoldButton, Skeleton, Switch } from '@/components/ui'
 import { useTabela } from '@/hooks/useTabela'
 import { cn } from '@/lib/format'
-import { DIAS } from '@/lib/rotulos'
+import { DIAS, eventoBloqueia } from '@/lib/rotulos'
 import type { Evento, LinhaAgenda } from '@/lib/types'
 
-type Form = Omit<LinhaAgenda, 'id' | 'evento' | 'enviado_hoje'> & { id?: number }
+type Form = Omit<LinhaAgenda, 'id' | 'evento' | 'evento_ativo' | 'evento_passou' | 'enviado_hoje'> & { id?: number }
 const vazio: Form = { horario: '09:00', dias_semana: [0, 1, 2, 3, 4, 5, 6], texto: '', imagem_url: '', evento_id: null, enviar_grupo: true, lembrete_story: false, ativo: true }
 
 export default function Agenda() {
@@ -22,7 +22,7 @@ export default function Agenda() {
     const { id, ...d } = form
     if (await salvar(id ?? null, { ...d, imagem_url: d.imagem_url || null }, id ? 'Linha salva' : 'Linha criada')) setForm(null)
   }
-  const ativosHoje = (data ?? []).filter(a => a.ativo && a.enviar_grupo).length
+  const ativosHoje = (data ?? []).filter(a => a.ativo && a.enviar_grupo && !eventoBloqueia(a)).length
   return (
     <Page>
       <PageHeader title="Agenda do grupo" subtitle={`Mensagens automáticas no grupo (com 0–60 s de variação, anti-ban) e lembretes de story para você. ${ativosHoje} envios ativos para o grupo por dia; o recomendado é até 10.`}
@@ -36,6 +36,7 @@ export default function Agenda() {
                 <p className="truncate text-sm">{a.texto}</p>
                 <div className="mt-1 flex flex-wrap gap-1.5">
                   {a.evento && <Chip tom="brand">{a.evento}</Chip>}
+                  {eventoBloqueia(a) && <Chip tom="red" ponto>não envia: evento {a.evento_ativo ? 'já passou' : 'desligado'}</Chip>}
                   {a.enviar_grupo && <Chip><Users className="size-3" />grupo</Chip>}
                   {a.lembrete_story && <Chip tom="violet"><Megaphone className="size-3" />story</Chip>}
                   {a.imagem_url && <Chip><Image className="size-3" />imagem</Chip>}

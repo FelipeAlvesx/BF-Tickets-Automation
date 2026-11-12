@@ -1,5 +1,7 @@
 // Percorre os fluxos do bot com payloads falsos da Evolution (ver scripts/simular.sh).
-// Uso: node scripts/simular.mjs [pix|link|admin|instagram|agenda|tudo]
+// Atenção: os fluxos de compra (pix/link/admin/tudo) assumem os 2 eventos de EXEMPLO do seed; com eventos
+// reais cadastrados rode só agenda|falha|pula|instagram.
+// Uso: node scripts/simular.mjs [pix|link|admin|instagram|agenda|falha|pula|tudo]
 import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 
@@ -12,6 +14,8 @@ const criados = new Set(); // contatos de teste, apagados no fim
 const sql = (q) => execFileSync('docker', ['compose', 'exec', '-T', 'postgres', 'sh', '-c', 'psql -tA -F"|" -U "$POSTGRES_USER" -d "$POSTGRES_DB"'], { input: q }).toString().trim();
 // O admin vale o que está no banco (o painel pode ter mudado em relação ao .env).
 const ADMIN = sql("select valor from app.config where chave='admin_numero'");
+const novoEvento = (ativo = true) => sql(`insert into app.eventos (nome, data_evento, link_compra, preco, ativo)
+  values ('SIM Evento', now() + interval '10 days', 'https://bftickets.exemplo/sim', 150, ${ativo}) returning id`).split('\n')[0];
 const log = async () => (await fetch(`${MOCK}/_log`)).json();
 
 function payload(numero, message, { fromMe = false, id = `SIM${seq++}` } = {}) {
@@ -117,19 +121,20 @@ async function idempotencia() {
 async function agenda() {
   console.log('\n▶ Agenda: linha para agora + 1 min (grupo + lembrete de story)');
   const GRUPO = '120363000000000000@g.us';
+  const ev = novoEvento();
   const grupoAntes = sql("select valor from app.config where chave='grupo_jid'");
   sql(`update app.config set valor='${GRUPO}' where chave='grupo_jid'`);
   const id = sql(`insert into app.agenda (horario, texto, evento_id, enviar_grupo, lembrete_story)
-    values (date_trunc('minute', now() at time zone 'America/Bahia' + interval '1 minute')::time, 'SIMULACAO {nome} {preco} {link}', 1, true, true) returning id`).split('\n')[0];
+    values (date_trunc('minute', now() at time zone 'America/Bahia' + interval '1 minute')::time, 'SIMULACAO {nome} {preco} {link}', ${ev}, true, true) returning id`).split('\n')[0];
   try {
     let grupo = [];
     for (let i = 0; i < 40 && !grupo.length; i++) { await espera(5000); grupo = (await log()).filter((m) => m.number === GRUPO && m.text.includes('SIMULACAO')); }
     assert.equal(grupo.length, 1, 'mensagem no grupo');
-    assert.match(grupo[0].text, /SIMULACAO Festival Verão Bahia R\$ 150,00 https:/);
+    assert.match(grupo[0].text, /SIMULACAO SIM Evento R\$ 150,00 https:/);
     await espera(8000);
-    const story = (await log()).filter((m) => m.number === ADMIN && /story|SIMULACAO|bftickets\.exemplo\/verao$/.test(m.text));
+    const story = (await log()).filter((m) => m.number === ADMIN && /story|SIMULACAO|bftickets\.exemplo\/sim$/.test(m.text));
     assert.ok(story.length >= 3, 'arte + legenda + link isolado ao admin');
-    assert.ok(story.some((m) => m.text === 'https://bftickets.exemplo/verao'), 'link sozinho');
+    assert.ok(story.some((m) => m.text === 'https://bftickets.exemplo/sim'), 'link sozinho');
     console.log(`    🤖 grupo: ${grupo[0].text}\n    📣 story: ${story.length} mensagens ao admin`);
     console.log('    aguardando 70 s para garantir que não duplica...');
     await espera(70000);
@@ -138,7 +143,7 @@ async function agenda() {
     const atraso = sql(`select extract(epoch from (enviado_em - date_trunc('minute', enviado_em)))::int from app.envios_agenda where agenda_id=${id}`);
     console.log(`    reivindicada ${atraso}s depois do minuto; o envio sai após o jitter de 1–60 s`);
   } finally {
-    sql(`delete from app.agenda where id=${id}; update app.config set valor='${grupoAntes}' where chave='grupo_jid'`);
+    sql(`delete from app.agenda where id=${id}; delete from app.eventos where id=${ev}; update app.config set valor='${grupoAntes}' where chave='grupo_jid'`);
   }
 }
 
@@ -175,19 +180,37 @@ async function instagram() {
 // Imagem fora do ar: a legenda e o link do story ainda chegam, e o admin recebe o alerta.
 async function agendaImagemFalha() {
   console.log('\n▶ Agenda com imagem que falha (story só com legenda + link, mais alerta)');
+  const ev = novoEvento();
   const id = sql(`insert into app.agenda (horario, texto, evento_id, imagem_url, enviar_grupo, lembrete_story)
-    values (date_trunc('minute', now() at time zone 'America/Bahia' + interval '1 minute')::time, 'SIMFALHA {nome} {link}', 1, 'https://exemplo.invalid/falha.jpg', false, true) returning id`).split('\n')[0];
+    values (date_trunc('minute', now() at time zone 'America/Bahia' + interval '1 minute')::time, 'SIMFALHA {nome} {link}', ${ev}, 'https://exemplo.invalid/falha.jpg', false, true) returning id`).split('\n')[0];
   try {
     let msgs = [];
     for (let i = 0; i < 40; i++) { await espera(5000); msgs = (await log()).filter((m) => m.number === ADMIN && /SIMFALHA|falharam|^https:\/\/bftickets/.test(m.text)); if (msgs.length >= 3) break; }
     const txt = msgs.map((m) => m.text).join('\n');
-    assert.match(txt, /SIMFALHA Festival Verão Bahia/, 'legenda chegou');
-    assert.ok(msgs.some((m) => m.text === 'https://bftickets.exemplo/verao'), 'link isolado chegou');
+    assert.match(txt, /SIMFALHA SIM Evento/, 'legenda chegou');
+    assert.ok(msgs.some((m) => m.text === 'https://bftickets.exemplo/sim'), 'link isolado chegou');
     assert.match(txt, /falharam/, 'admin recebeu o alerta');
     console.log(`    📣 ${msgs.length} mensagens ao admin: legenda, link e alerta de falha`);
   } finally {
-    sql(`delete from app.agenda where id=${id}`);
+    sql(`delete from app.agenda where id=${id}; delete from app.eventos where id=${ev}`);
   }
+}
+
+// Linha vencida ligada a evento desligado ou já encerrado NÃO pode ser reivindicada; a do evento ativo, sim.
+// Roda numa transação com rollback: nada fica gravado e o relógio do n8n não vê as linhas.
+async function agendaPula() {
+  console.log('\n▶ Agenda não anuncia evento desligado nem encerrado');
+  const { sqlAgendaVencida } = await import('../src/agenda.js');
+  const out = sql(`begin;
+    insert into app.eventos (nome, data_evento, ativo) values ('SIM on', now() + interval '5 days', true), ('SIM off', now() + interval '5 days', false), ('SIM velho', now() - interval '1 day', true);
+    insert into app.agenda (horario, texto, evento_id)
+      select (now() at time zone 'America/Bahia' - interval '1 minute')::time, 'SIM ' || nome, id from app.eventos where nome like 'SIM %';
+    ${sqlAgendaVencida().replace(/;\s*$/, '')};
+    rollback;`);
+  const enviados = out.split('\n').filter((l) => l.includes('SIM '));
+  assert.equal(enviados.length, 1, `só 1 linha (evento ativo) deve sair, saíram: ${enviados.length}`);
+  assert.ok(enviados[0].includes('SIM SIM on'), 'a do evento ativo');
+  console.log('    ok: evento ativo sai; desligado e encerrado ficam de fora');
 }
 
 const alvo = process.argv[2] ?? 'tudo';
@@ -208,4 +231,5 @@ if (alvo === 'tudo') await idempotencia();
 if (alvo === 'instagram' || alvo === 'tudo') await instagram();
 if (alvo === 'agenda' || alvo === 'tudo') await agenda();
 if (alvo === 'falha' || alvo === 'tudo') await agendaImagemFalha();
+if (alvo === 'pula' || alvo === 'tudo') await agendaPula();
 console.log('\n✅ simulação ok');

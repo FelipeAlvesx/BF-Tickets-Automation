@@ -2,14 +2,15 @@
 
 import { render, varsEvento, textoBot } from './templates.js';
 
-// Linhas da agenda vencidas agora e ainda não enviadas hoje. A trava real é o
+// Linhas da agenda vencidas agora e ainda não enviadas hoje. Linha ligada a evento desligado ou que
+// já passou não sai (senão o grupo recebe anúncio de evento que o dono já tirou do ar). A trava real é o
 // UNIQUE(agenda_id, data) de envios_agenda: o INSERT reivindica antes de enviar.
 // Janela de 15 min: se o n8n ficou fora do ar, não despeja a manhã inteira de uma vez.
 export function sqlAgendaVencida(tz = 'America/Bahia') {
   return `with agora as (select (now() at time zone '${tz}') as t),
 vencidas as (
-  select a.id from app.agenda a, agora
-  where a.ativo and extract(dow from agora.t)::int = any(a.dias_semana)
+  select a.id from app.agenda a left join app.eventos e on e.id = a.evento_id, agora
+  where a.ativo and (a.evento_id is null or (e.ativo and e.data_evento > now())) and extract(dow from agora.t)::int = any(a.dias_semana)
     and a.horario <= agora.t::time and a.horario > (agora.t - interval '15 minutes')::time
 ),
 reivindicadas as (

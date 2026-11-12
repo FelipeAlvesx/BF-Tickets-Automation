@@ -8,7 +8,7 @@ import { api } from '@/lib/api'
 import { useApp } from '@/lib/app'
 import { brl, ha } from '@/lib/format'
 import { rise } from '@/lib/motion'
-import { DIAS, STATUS_PEDIDO, contato } from '@/lib/rotulos'
+import { DIAS, STATUS_PEDIDO, contato, eventoBloqueia } from '@/lib/rotulos'
 import type { LinhaAgenda, Pedido, WhatsApp } from '@/lib/types'
 
 function Kpi({ rotulo, valor, to, destaque }: { rotulo: string; valor: number | string | undefined; to?: string; destaque?: boolean }) {
@@ -27,7 +27,7 @@ export default function Hoje() {
   const { data: agenda } = usePoll(() => api<LinhaAgenda[]>('/t/agenda'), 30_000)
   const { data: zap } = usePoll(() => api<WhatsApp>('/whatsapp'), 30_000)
   const dow = new Date().getDay()
-  const hoje = (agenda ?? []).filter(a => a.ativo && a.dias_semana.includes(dow))
+  const hoje = (agenda ?? []).filter(a => a.ativo && !eventoBloqueia(a) && a.dias_semana.includes(dow))
   const agoraHm = new Date().toTimeString().slice(0, 5)
   const saud = new Date().getHours() < 12 ? 'Bom dia' : new Date().getHours() < 18 ? 'Boa tarde' : 'Boa noite'
 

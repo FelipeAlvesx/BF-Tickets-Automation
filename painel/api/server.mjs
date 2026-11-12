@@ -126,7 +126,7 @@ const rotas = [
     (select count(*) from app.pedidos where status='aprovado' and atualizado_em >= ${HOJE})::int as aprovados_hoje,
     (select coalesce(sum(valor_total),0) from app.pedidos where status='aprovado' and atualizado_em >= ${HOJE})::float as receita_hoje,
     (select count(*) from app.envios_agenda where data = (now() at time zone 'America/Bahia')::date)::int as agenda_enviadas,
-    (select count(*) from app.agenda where ativo and extract(dow from now() at time zone 'America/Bahia')::int = any(dias_semana))::int as agenda_hoje,
+    (select count(*) from app.agenda a left join app.eventos e on e.id = a.evento_id where a.ativo and (a.evento_id is null or (e.ativo and e.data_evento > now())) and extract(dow from now() at time zone 'America/Bahia')::int = any(a.dias_semana))::int as agenda_hoje,
     now() as agora`))[0]],
 
   ['GET', '/api/whatsapp', whatsapp],

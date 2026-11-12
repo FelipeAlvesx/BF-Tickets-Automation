@@ -4,7 +4,7 @@ export const TABELAS = {
   eventos: { pk: 'id', cols: ['nome', 'data_evento', 'local', 'link_compra', 'preco', 'imagem_url', 'ativo'], apagar: true,
     listar: 'select * from app.eventos order by ativo desc, data_evento' },
   agenda: { pk: 'id', cols: ['horario', 'dias_semana', 'texto', 'imagem_url', 'evento_id', 'enviar_grupo', 'lembrete_story', 'ativo'], apagar: true,
-    listar: `select a.*, e.nome as evento,
+    listar: `select a.*, e.nome as evento, e.ativo as evento_ativo, (e.data_evento < now()) as evento_passou,
       exists(select 1 from app.envios_agenda ea where ea.agenda_id = a.id and ea.data = (now() at time zone 'America/Bahia')::date) as enviado_hoje
       from app.agenda a left join app.eventos e on e.id = a.evento_id order by a.horario` },
   mensagens: { pk: 'chave', cols: ['texto'], listar: 'select * from app.mensagens order by chave' },
