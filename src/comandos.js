@@ -4,6 +4,7 @@
 import { soDigitos, mascararCpf } from './cpf.js';
 import { textoBot, formatarPreco, formatarData } from './templates.js';
 import { lit } from './sql.js';
+import { variantesNumero } from './canais.js';
 
 export const AJUDA = [
   'Comandos:',
@@ -70,13 +71,13 @@ from p left join app.eventos e on e.id=p.evento_id`;
 from app.pedidos p left join app.eventos e on e.id=p.evento_id where p.status in ${ABERTOS} order by p.id limit 30`;
     case 'pausar':
       return `with u as (update app.conversas set estado='humano', pausado_ate=now()+make_interval(hours=>${Number(pausaHoras)}), atualizado_em=now()
-  where contato_id=${lit(c.contato)} returning canal),
+  where contato_id = any(array[${variantesNumero(c.contato).map(lit).join(',')}]) returning canal),
 i as (insert into app.conversas (canal, contato_id, estado, pausado_ate)
   select 'whatsapp', ${lit(c.contato)}, 'humano', now()+make_interval(hours=>${Number(pausaHoras)}) where not exists (select 1 from u) returning canal)
 select canal from u union all select canal from i`;
     case 'retomar':
       return `update app.conversas set estado='inicio', contexto='{}'::jsonb, pausado_ate=null, atualizado_em=now()
-where contato_id=${lit(c.contato)} returning canal`;
+where contato_id = any(array[${variantesNumero(c.contato).map(lit).join(',')}]) returning canal`;
     case 'eventos':
       return 'select id, nome, data_evento, local, preco from app.eventos where ativo order by data_evento';
     default:

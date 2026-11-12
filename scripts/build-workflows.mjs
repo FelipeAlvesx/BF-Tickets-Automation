@@ -167,14 +167,14 @@ const c = lit(m.contato_id);
 const deb = m.fromMe ? '' : \`,
 d as (insert into app.debounce (canal, contato_id, nome, texto, midia)
   select 'whatsapp', \${c}, \${lit(m.nome)}, \${lit(m.texto)}, \${lit(m.midia)} from novo, cfg
-  where not (cfg.admin = \${c} and \${lit(m.texto)} like '/%') returning id)\`;
+  where not (cfg.admin in (\${variantesNumero(m.contato_id).map(lit).join(',')}) and \${lit(m.texto)} like '/%') returning id)\`;
 const sql = \`with novo as (insert into app.mensagens_processadas (id) values (\${lit(m.id)}) on conflict do nothing returning id),
 cfg as (select coalesce((select valor from app.config where chave='admin_numero'), '') as admin,
   coalesce((select valor from app.config where chave='pausa_humano_horas'), '12') as horas)\${deb}
 select exists(select 1 from novo) as novo, cfg.admin, cfg.horas\${m.fromMe ? '' : ', (select id from d) as debounce_id'} from cfg\`;
 return [{ json: { ...m, sql } }];`),
   pg('Registrar'),
-  code('Rotear', ['sql'], `
+  code('Rotear', ['sql', 'canais'], `
 const m = $('Normalizar').first().json;
 const d = $input.first().json;
 if (!d.novo) return []; // webhook repetido
@@ -188,7 +188,7 @@ where not exists (select 1 from app.mensagens_enviadas where id = \${lit(m.id)})
 on conflict (canal, contato_id) do update set estado = 'humano', pausado_ate = excluded.pausado_ate, atualizado_em = now()\`;
   return [{ json: { saida: 1, sql } }];
 }
-if (d.admin && m.contato_id === d.admin && m.texto.startsWith('/')) return [{ json: { saida: 0, texto: m.texto, admin: d.admin } }];
+if (d.admin && variantesNumero(m.contato_id).includes(d.admin) && m.texto.startsWith('/')) return [{ json: { saida: 0, texto: m.texto, admin: m.contato_id } }]; // responde no número de onde veio
 if (!d.debounce_id) return [];
 const sql_juntar = \`with del as (delete from app.debounce where canal = 'whatsapp' and contato_id = \${c}
   and (select max(id) from app.debounce where canal = 'whatsapp' and contato_id = \${c}) = \${Number(d.debounce_id)} returning *)

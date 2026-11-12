@@ -1,6 +1,15 @@
 // Adaptadores: Evolution (WhatsApp) e ManyChat (Instagram) <-> formato do core.
 // Mensagem do core: {tipo:'texto', texto} | {tipo:'imagem'|'documento', url?|base64?, texto?, mimetype?, fileName?}
 
+// Celular BR: o WhatsApp às vezes entrega 5571 + 8 dígitos (sem o 9 extra) e a gente guarda com 9.
+// Devolve as formas equivalentes do mesmo número, para comparar e para buscar no banco.
+export function variantesNumero(n) {
+  const d = String(n ?? '').replace(/\D/g, '');
+  const sem9 = d.match(/^(55\d{2})(\d{8})$/);
+  const com9 = d.match(/^(55\d{2})9(\d{8})$/);
+  return [d, sem9 && `${sem9[1]}9${sem9[2]}`, com9 && `${com9[1]}${com9[2]}`].filter(Boolean);
+}
+
 // Webhook messages.upsert da Evolution v2 -> {id, contato_id, nome, texto, midia, fromMe} ou null (ignorar).
 // Mensagens enviadas pela API não voltam aqui (emitOwnEvents=false): fromMe = alguém digitou no celular.
 export function normalizarEvolution(body) {

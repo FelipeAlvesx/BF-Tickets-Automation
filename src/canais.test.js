@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { normalizarEvolution, chamadasEvolution, normalizarManychat, respostaManychat, sendContentManychat } from './canais.js';
+import { variantesNumero, normalizarEvolution, chamadasEvolution, normalizarManychat, respostaManychat, sendContentManychat } from './canais.js';
 
 const fx = (n) => JSON.parse(readFileSync(new URL(`../tests/fixtures/${n}.json`, import.meta.url)));
 
@@ -44,4 +44,11 @@ test('ManyChat: entrada, comprovante e resposta v2', () => {
   assert.deepEqual([full.contato_id, full.nome, full.texto, full.midia.tipo], ['77', 'Bia', 'oi', 'imagem']);
   assert.equal(respostaManychat(Array(15).fill({ tipo: 'texto', texto: 'x' })).content.messages.length, 10);
   assert.deepEqual(sendContentManychat('42', [{ tipo: 'texto', texto: 'ok' }]), { subscriber_id: 42, data: { version: 'v2', content: { type: 'instagram', messages: [{ type: 'text', text: 'ok' }] } } });
+});
+
+test('número BR: com e sem o 9 extra são o mesmo contato', () => {
+  assert.ok(variantesNumero('557197071909').includes('5571997071909'));
+  assert.ok(variantesNumero('5571997071909').includes('557197071909'));
+  assert.deepEqual(variantesNumero('5511987654321'), ['5511987654321', '551187654321']);
+  assert.deepEqual(variantesNumero('123456789012345'), ['123456789012345']); // @lid ou outro país: só ele mesmo
 });
