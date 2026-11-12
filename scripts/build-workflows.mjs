@@ -106,13 +106,21 @@ for (const { json } of $input.all()) {
   for (const c of chamadasEvolution(String(json.numero), json.mensagens)) out.push({ json: c });
 }
 return out;`),
-  http('Evolution', '={{ $env.EVOLUTION_URL }}/message/{{ $json.endpoint }}/{{ $env.EVOLUTION_INSTANCE }}', '={{ JSON.stringify($json.body) }}', 'evo', {}, { batching: { batch: { batchSize: 1, batchInterval: 300 } }, timeout: 30000 }),
+  // Uma mensagem que falha (ex.: URL da imagem fora do ar) não pode derrubar as seguintes:
+  // continua o envio, grava o que saiu e só no fim levanta o erro (que vira alerta ao admin).
+  http('Evolution', '={{ $env.EVOLUTION_URL }}/message/{{ $json.endpoint }}/{{ $env.EVOLUTION_INSTANCE }}', '={{ JSON.stringify($json.body) }}', 'evo', { onError: 'continueRegularOutput' }, { batching: { batch: { batchSize: 1, batchInterval: 300 } }, timeout: 30000 }),
   code('Ids enviados', ['sql'], `
-const ids = $input.all().map((i) => i.json?.key?.id).filter(Boolean);
-if (!ids.length) return [];
-return [{ json: { sql: \`insert into app.mensagens_enviadas (id) values \${ids.map((i) => \`(\${lit(i)})\`).join(', ')} on conflict do nothing\` } }];`),
-  pg('Gravar ids'),
-], [['Entrada', 'Montar chamadas'], ['Montar chamadas', 'Evolution'], ['Evolution', 'Ids enviados'], ['Ids enviados', 'Gravar ids']]);
+const itens = $input.all().map((i) => i.json);
+const ids = itens.map((j) => j?.key?.id).filter(Boolean);
+const falhas = itens.filter((j) => !j?.key?.id);
+const motivo = String(falhas[0]?.error?.message ?? falhas[0]?.error ?? falhas[0]?.message ?? 'sem id na resposta');
+return [{ json: { falhas: falhas.length, motivo, sql: ids.length ? \`insert into app.mensagens_enviadas (id) values \${ids.map((i) => \`(\${lit(i)})\`).join(', ')} on conflict do nothing\` : 'select 1' } }];`),
+  pg('Gravar ids', '={{ $json.sql }}', { alwaysOutputData: true }),
+  code('Conferir falhas', [], `
+const f = $('Ids enviados').first().json;
+if (f.falhas) throw new Error(\`\${f.falhas} envio(s) falharam: \${f.motivo.slice(0, 150)}\`);
+return [];`),
+], [['Entrada', 'Montar chamadas'], ['Montar chamadas', 'Evolution'], ['Evolution', 'Ids enviados'], ['Ids enviados', 'Gravar ids'], ['Gravar ids', 'Conferir falhas']]);
 
 const core = workflow(W.core, '04 · Core (atendimento)', [
   gatilho(),

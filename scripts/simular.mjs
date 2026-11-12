@@ -5,12 +5,13 @@ import assert from 'node:assert/strict';
 
 const N8N = process.env.N8N ?? 'http://localhost:5679';
 const MOCK = process.env.MOCK ?? 'http://localhost:8099';
-const ADMIN = process.env.ADMIN_NUMERO;
 const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 let seq = Date.now();
 const criados = new Set(); // contatos de teste, apagados no fim
 
 const sql = (q) => execFileSync('docker', ['compose', 'exec', '-T', 'postgres', 'sh', '-c', 'psql -tA -F"|" -U "$POSTGRES_USER" -d "$POSTGRES_DB"'], { input: q }).toString().trim();
+// O admin vale o que está no banco (o painel pode ter mudado em relação ao .env).
+const ADMIN = sql("select valor from app.config where chave='admin_numero'");
 const log = async () => (await fetch(`${MOCK}/_log`)).json();
 
 function payload(numero, message, { fromMe = false, id = `SIM${seq++}` } = {}) {
@@ -171,8 +172,26 @@ async function instagram() {
   assert.match(sql(`select comprovante_url from app.pedidos where canal='instagram' and contato_id='${ig}'`), /lookaside/);
 }
 
+// Imagem fora do ar: a legenda e o link do story ainda chegam, e o admin recebe o alerta.
+async function agendaImagemFalha() {
+  console.log('\n▶ Agenda com imagem que falha (story só com legenda + link, mais alerta)');
+  const id = sql(`insert into app.agenda (horario, texto, evento_id, imagem_url, enviar_grupo, lembrete_story)
+    values (date_trunc('minute', now() at time zone 'America/Bahia' + interval '1 minute')::time, 'SIMFALHA {nome} {link}', 1, 'https://exemplo.invalid/falha.jpg', false, true) returning id`).split('\n')[0];
+  try {
+    let msgs = [];
+    for (let i = 0; i < 40; i++) { await espera(5000); msgs = (await log()).filter((m) => m.number === ADMIN && /SIMFALHA|falharam|^https:\/\/bftickets/.test(m.text)); if (msgs.length >= 3) break; }
+    const txt = msgs.map((m) => m.text).join('\n');
+    assert.match(txt, /SIMFALHA Festival Verão Bahia/, 'legenda chegou');
+    assert.ok(msgs.some((m) => m.text === 'https://bftickets.exemplo/verao'), 'link isolado chegou');
+    assert.match(txt, /falharam/, 'admin recebeu o alerta');
+    console.log(`    📣 ${msgs.length} mensagens ao admin: legenda, link e alerta de falha`);
+  } finally {
+    sql(`delete from app.agenda where id=${id}`);
+  }
+}
+
 const alvo = process.argv[2] ?? 'tudo';
-assert.ok(ADMIN, 'ADMIN_NUMERO vazio no .env');
+assert.ok(ADMIN, 'admin_numero vazio em app.config');
 await fetch(`${MOCK}/_log`, { method: 'DELETE' });
 process.on('exit', () => {
   if (!criados.size) return;
@@ -188,4 +207,5 @@ if (alvo === 'pix' || alvo === 'admin' || alvo === 'tudo') {
 if (alvo === 'tudo') await idempotencia();
 if (alvo === 'instagram' || alvo === 'tudo') await instagram();
 if (alvo === 'agenda' || alvo === 'tudo') await agenda();
+if (alvo === 'falha' || alvo === 'tudo') await agendaImagemFalha();
 console.log('\n✅ simulação ok');

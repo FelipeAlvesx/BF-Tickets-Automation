@@ -11,6 +11,7 @@ http.createServer(async (req, res) => {
   const m = req.url.match(/^\/message\/(sendText|sendMedia)\//);
   if (m) {
     const body = JSON.parse(s || '{}');
+    if (m[1] === 'sendMedia' && String(body.media).includes('falha')) return json(500, { message: 'mock: imagem fora do ar' });
     const id = `MOCK${++n}`;
     log.push({ id, tipo: m[1], number: body.number, text: body.text ?? body.caption ?? '', media: body.media ? String(body.media).slice(0, 40) : undefined });
     return json(201, { key: { remoteJid: `${body.number}@s.whatsapp.net`, fromMe: true, id }, status: 'PENDING' });

@@ -127,8 +127,8 @@ insert into config (chave, valor) values
   ('bot_ligado', 'true');
 
 insert into eventos (nome, data_evento, local, link_compra, preco, imagem_url) values
-  ('Festival Verão Bahia', (current_date + 30 + time '22:00') at time zone 'America/Bahia', 'Arena Fonte Nova, Salvador', 'https://bftickets.exemplo/verao', 150.00, 'https://picsum.photos/seed/verao/1080/1350'),
-  ('Pagode do Rio Vermelho', (current_date + 12 + time '20:00') at time zone 'America/Bahia', 'Largo da Mariquita, Salvador', 'https://bftickets.exemplo/pagode', 60.00, 'https://picsum.photos/seed/pagode/1080/1350');
+  ('Festival Verão Bahia', (current_date + 30 + time '22:00') at time zone 'America/Bahia', 'Arena Fonte Nova, Salvador', 'https://bftickets.exemplo/verao', 150.00, null),
+  ('Pagode do Rio Vermelho', (current_date + 12 + time '20:00') at time zone 'America/Bahia', 'Largo da Mariquita, Salvador', 'https://bftickets.exemplo/pagode', 60.00, null);
 
 insert into agenda (horario, texto, evento_id, enviar_grupo, lembrete_story) values
   ('09:00', 'Bom dia, galera! ☀️ {nome} tá chegando: {data}. Garanta o seu: {link}', 1, true, true),
