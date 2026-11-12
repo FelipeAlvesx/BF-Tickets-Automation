@@ -6,7 +6,7 @@
   (Docker Desktop → Settings → Resources).
 - **Node.js 20 ou mais novo**, para `make build` e `make simular`.
 - Um **celular com um número só para o bot**, com WhatsApp (de preferência o Business) já ativado.
-- Uma **chave de API de LLM** compatível com OpenAI (ex.: OpenAI). Ela só é usada para entender mensagens ambíguas.
+- Uma **chave de API da Anthropic** (https://platform.claude.com/settings/keys). Ela só é usada para entender mensagens ambíguas, com o modelo mais barato (Haiku 5.5): centavos por milhares de mensagens.
 - O **número do dono (admin)**, que recebe os comprovantes e manda os comandos.
 
 ## 1. Configurar (2 min)
@@ -20,8 +20,8 @@ O comando cria o `.env` com senhas aleatórias. Abra o arquivo e preencha:
 | Variável | O que pôr |
 |---|---|
 | `ADMIN_NUMERO` | WhatsApp do dono com 55 + DDD, só números. Ex.: `5571999998888` |
-| `LLM_API_KEY` | Sua chave da OpenAI (ou de outro provedor compatível) |
-| `LLM_MODEL` / `LLM_BASE_URL` | Mantenha `gpt-4o-mini` e a URL da OpenAI, ou use outro provedor |
+| `LLM_API_KEY` | Sua chave da Anthropic |
+| `LLM_MODEL` / `LLM_BASE_URL` | Já vêm prontos: `claude-haiku-5-5` e `https://api.anthropic.com` |
 | `PAINEL_USUARIO` / `PAINEL_SENHA` | O login do painel (a senha já vem gerada; troque se quiser) |
 | `MANYCHAT_*` | Só se for usar o Instagram (ver `manychat/SETUP.md`) |
 

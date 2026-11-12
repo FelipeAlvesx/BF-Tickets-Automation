@@ -24,7 +24,7 @@ function conversa(entradas, { eventos = EVENTOS, llm } = {}) {
   return saidas;
 }
 const textos = (r) => r.mensagens.map((m) => m.texto).join('\n');
-const respostaLLM = (json) => ({ choices: [{ message: { content: JSON.stringify(json) } }] });
+const respostaLLM = (json) => ({ content: [{ type: 'text', text: JSON.stringify(json) }] });
 
 test('fluxo Pix completo', () => {
   const s = conversa(['oi', '1', '1', '2', 'pix', { midia: { tipo: 'imagem', mimetype: 'image/jpeg', ref: 'wa:ABC' } }, 'Ana Maria Souza', '529.982.247-25', 'ana@exemplo.com', 'e aí?']);
@@ -137,7 +137,10 @@ test('texto ambíguo pede LLM; baixa confiança 2x passa para humano', () => {
   const ctx = { canal: 'instagram', contato_id: '99', texto: 'blz e aquele role la', agora: AGORA, eventos: EVENTOS, config: CONFIG, textos: {}, prompt: 'P', modelo: 'm' };
   const r = processar(ctx);
   assert.equal(r.precisaLLM, true);
-  assert.equal(r.llm.temperature, 0);
+  assert.equal(r.llm.thinking.type, 'disabled');
+  assert.equal(r.llm.output_config.effort, 'low');
+  assert.ok(!('temperature' in r.llm), 'Haiku 5.5 rejeita temperature');
+  assert.equal(r.llm.system, 'P');
   assert.equal(r.llm.model, 'm');
   const baixa = () => respostaLLM({ intencao: 'outro', confianca: 0.2 });
   const s = conversa(['hmm aquele role', 'sei la mano'], { llm: baixa });

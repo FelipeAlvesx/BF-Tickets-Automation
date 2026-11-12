@@ -46,7 +46,7 @@ const uuid = (s) => {
 const CRED = {
   pg: { postgres: { id: 'bfPostgres000001', name: 'BF Postgres' } },
   evo: { httpHeaderAuth: { id: 'bfEvolution00001', name: 'BF Evolution apikey' } },
-  llm: { httpHeaderAuth: { id: 'bfLLM00000000001', name: 'BF LLM' } },
+  llm: { httpHeaderAuth: { id: 'bfLLM00000000001', name: 'BF LLM (Anthropic)' } },
   manychat: { httpHeaderAuth: { id: 'bfManychat000001', name: 'BF ManyChat API' } },
   mcHook: { httpHeaderAuth: { id: 'bfManychatHook01', name: 'BF ManyChat webhook' } },
   painel: { httpHeaderAuth: { id: 'bfPainelToken001', name: 'BF Painel token' } },
@@ -85,9 +85,9 @@ const webhook = (name, path, { auth, responseNode = false } = {}) => ({
   parameters: { httpMethod: 'POST', path, responseMode: responseNode ? 'responseNode' : 'onReceived', ...(auth ? { authentication: 'headerAuth' } : {}), options: {} },
   ...(auth ? { credentials: CRED[auth] } : {}),
 });
-const http = (name, url, body, cred, extra = {}, opcoes = {}) => ({
+const http = (name, url, body, cred, extra = {}, opcoes = {}, params = {}) => ({
   name, type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
-  parameters: { method: 'POST', url, authentication: 'genericCredentialType', genericAuthType: 'httpHeaderAuth', sendBody: true, specifyBody: 'json', jsonBody: body, options: opcoes },
+  parameters: { method: 'POST', url, authentication: 'genericCredentialType', genericAuthType: 'httpHeaderAuth', sendBody: true, specifyBody: 'json', jsonBody: body, options: opcoes, ...params },
   credentials: CRED[cred], ...extra,
 });
 const rota = (name, saidas) => ({ name, type: 'n8n-nodes-base.switch', typeVersion: 3.2, parameters: { mode: 'expression', numberOutputs: saidas, output: '={{ $json.saida }}' } });
@@ -132,13 +132,14 @@ return [{ json: { ctx, r, precisaLLM: !!r.precisaLLM, llm: r.llm ?? null } }];`)
     conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'loose', version: 2 }, combinator: 'and',
       conditions: [{ id: uuid('cond-llm'), leftValue: '={{ $json.precisaLLM }}', rightValue: '', operator: { type: 'boolean', operation: 'true', singleValue: true } }] },
     options: {} } },
-  http('LLM', '={{ $env.LLM_BASE_URL }}/chat/completions', '={{ JSON.stringify($json.llm) }}', 'llm', { onError: 'continueRegularOutput' }, { timeout: 8000 }),
+  http('LLM', '={{ $env.LLM_BASE_URL }}/v1/messages', '={{ JSON.stringify($json.llm) }}', 'llm', { onError: 'continueRegularOutput' }, { timeout: 8000 },
+    { sendHeaders: true, specifyHeaders: 'keypair', headerParameters: { parameters: [{ name: 'anthropic-version', value: '2026-10-21' }] } }),
   code('Decidir', ['estados', 'sql'], `
 const p = $('Processar').first().json;
 let r = p.r;
 if (p.precisaLLM) {
   const resp = $input.first().json;
-  r = processar(p.ctx, resp && resp.choices ? resp : {}); // LLM fora do ar = baixa confiança
+  r = processar(p.ctx, resp && resp.content ? resp : {}); // LLM fora do ar = baixa confiança
 }
 return [{ json: { r, sql: sqlGravar(p.ctx, r) } }];`),
   pg('Gravar'),

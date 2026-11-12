@@ -77,17 +77,18 @@ export function intencaoGlobal(texto) {
   return null;
 }
 
-// Corpo da chamada OpenAI-compatible. `prompt` vem de prompts/extrator.md.
+// Corpo da chamada à API Messages da Anthropic (POST /v1/messages). `prompt` vem de prompts/extrator.md.
+// Haiku 5.5 rejeita temperature/top_p/top_k (por isso ficam de fora: o determinismo vem do prompt curto
+// e do JSON fechado) e pensa por padrão: desligado + effort low, porque só classificamos.
 export function pedidoLLM({ prompt, modelo, texto, estado, eventos }) {
   const lista = eventos.map((e) => `${e.id}: ${e.nome}`).join('\n') || '(nenhum)';
   return {
     model: modelo,
-    temperature: 0,
-    response_format: { type: 'json_object' },
-    messages: [
-      { role: 'system', content: prompt },
-      { role: 'user', content: `Estado: ${estado}\nEventos ativos:\n${lista}\n\nMensagem: ${texto}` },
-    ],
+    max_tokens: 300,
+    thinking: { type: 'disabled' },
+    output_config: { effort: 'low' },
+    system: prompt,
+    messages: [{ role: 'user', content: `Estado: ${estado}\nEventos ativos:\n${lista}\n\nMensagem: ${texto}` }],
   };
 }
 
@@ -95,7 +96,7 @@ export function pedidoLLM({ prompt, modelo, texto, estado, eventos }) {
 export function lerRespostaLLM(resp, eventos = []) {
   const vazio = { intencao: 'outro', evento_id: null, quantidade: null, nome: null, cpf: null, email: null, confianca: 0 };
   try {
-    const conteudo = resp?.choices?.[0]?.message?.content ?? '';
+    const conteudo = (resp?.content ?? []).filter((b) => b.type === 'text').map((b) => b.text).join('');
     const json = JSON.parse(conteudo.slice(conteudo.indexOf('{'), conteudo.lastIndexOf('}') + 1));
     const ids = new Set(eventos.map((e) => Number(e.id)));
     const q = Number(json.quantidade);

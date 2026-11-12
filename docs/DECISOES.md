@@ -11,6 +11,7 @@
 - 2026-11-12 · `$env` liberado no n8n (`N8N_BLOCK_ENV_ACCESS_IN_NODE=false`) só para valores não secretos (URL da Evolution, modelo, debounce); chaves ficam em credenciais do n8n.
 - 2026-11-12 · Task runner do n8n em modo interno (padrão da 2.45): sem container extra; trocar para `external` quando a 3.0 remover o interno.
 - 2026-11-12 · `EXECUTIONS_DATA_SAVE_ON_SUCCESS=none`: o n8n marca a execução com `deletedAt` e o pruning apaga de vez em até 1 h; só erros ficam (7 dias).
+- 2026-11-12 · LLM = API nativa da Anthropic (`/v1/messages`, `claude-haiku-5-5`, o mais barato), não o modo compatível com OpenAI: ele devolve 400 para `response_format: json_object` e para `temperature` abaixo de 1. Haiku 5.5 também rejeita `temperature`/`top_p`/`top_k`, então o brief de `temperature=0` fica de fora (o determinismo vem do prompt curto + JSON fechado); thinking desligado e `effort: low` porque só classificamos.
 - 2026-11-12 · LLM só quando o atalho (regex/keywords) não resolve e só nos estados de texto livre; nome, CPF e e-mail nunca passam pelo LLM. LLM fora do ar = baixa confiança (2x → humano).
 - 2026-11-12 · CPF inteiro só em `pedidos.cpf`; contexto da conversa guarda só `cpf_mascarado`; `historico` e alertas passam por `mascararCpfsNoTexto`.
 - 2026-11-12 · Tabela `app.historico` (não pedida no brief) para o painel mostrar as conversas; CPF mascarado antes de gravar.

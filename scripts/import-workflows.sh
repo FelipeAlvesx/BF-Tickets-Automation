@@ -13,7 +13,7 @@ const e = process.env, h = (id, name, n, v) => ({ id, name, type: "httpHeaderAut
 process.stdout.write(JSON.stringify([
   { id: "bfPostgres000001", name: "BF Postgres", type: "postgres", data: { host: "postgres", port: 5432, database: e.POSTGRES_DB, user: e.POSTGRES_USER, password: e.POSTGRES_PASSWORD, ssl: "disable" } },
   h("bfEvolution00001", "BF Evolution apikey", "apikey", e.EVOLUTION_API_KEY),
-  h("bfLLM00000000001", "BF LLM", "Authorization", "Bearer " + (e.LLM_API_KEY || "sem-chave")),
+  h("bfLLM00000000001", "BF LLM (Anthropic)", "x-api-key", e.LLM_API_KEY || "sem-chave"),
   h("bfManychat000001", "BF ManyChat API", "Authorization", "Bearer " + (e.MANYCHAT_API_KEY || "sem-chave")),
   h("bfManychatHook01", "BF ManyChat webhook", "x-bf-token", e.MANYCHAT_WEBHOOK_TOKEN),
   h("bfPainelToken001", "BF Painel token", "x-painel-token", e.PAINEL_TOKEN),
