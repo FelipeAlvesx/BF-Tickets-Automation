@@ -30,8 +30,9 @@ repassa a primeira DM do dia de cada contato, e a conversa trava no segundo pass
    │
    ▼
 [Condition]  estado  is  aguardando_comprovante
-   ├─ Sim ─▶ [Send Message #1]  texto "Manda a foto do comprovante aqui"
-   │            + Data Collection: Reply Type = Image, salvar em comprovante_url
+   ├─ Sim ─▶ [Send Message #1]  só a pergunta da Data Collection (sem texto separado):
+   │            "Manda aqui o comprovante do Pix: uma foto só (print ou imagem), numa única mensagem."
+   │            Reply Type = Image, salvar em comprovante_url
    │            │  (Next Step)
    │            ▼
    └─ Não ──▶ [Send Message]  com um bloco Dynamic (o mesmo passo nos dois caminhos)
