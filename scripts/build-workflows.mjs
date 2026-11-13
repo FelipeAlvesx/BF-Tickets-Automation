@@ -252,17 +252,24 @@ const rows = $input.all().map((i) => i.json);
 const res = formatarResposta(p.c, rows);
 const out = [];
 if (res.cliente?.canal === 'whatsapp') out.push({ json: { saida: 0, numero: res.cliente.contato_id, mensagens: res.cliente.mensagens } });
-if (res.cliente?.canal === 'instagram') out.push({ json: { saida: 1, body: sendContentManychat(res.cliente.contato_id, res.cliente.mensagens) } });
+if (res.cliente?.canal === 'instagram') out.push({ json: { saida: 2, body: sendContentManychat(res.cliente.contato_id, res.cliente.mensagens) } });
 if (p.origem === 'whatsapp') out.push({ json: { saida: 0, numero: p.admin, mensagens: [{ tipo: 'texto', texto: res.admin }] } });
-else out.push({ json: { saida: 2, resposta: { ok: !p.c.erro, texto: res.admin } } });
+else out.push({ json: { saida: 1, resposta: { ok: !p.c.erro, texto: res.admin } } });
 return out;`),
   rota('Destino', 3),
   executar('Enviar', W.enviar),
-  http('ManyChat sendContent', 'https://api.manychat.com/fb/sending/sendContent', '={{ JSON.stringify($json.body) }}', 'manychat', { onError: 'continueRegularOutput' }),
+  // A ordem v1 roda os ramos pela posição no canvas: a resposta ao painel fica antes do ManyChat,
+  // senão um erro no aviso ao cliente deixa o painel sem resposta.
   responder('Resposta ao painel', '={{ JSON.stringify($json.resposta) }}'),
+  http('ManyChat sendContent', 'https://api.manychat.com/fb/sending/sendContent', '={{ JSON.stringify($json.body) }}', 'manychat', { onError: 'continueRegularOutput' }),
+  // Sem API key, fora da janela de 24 h etc.: o cliente não foi avisado. Vira erro → alerta ao admin no WhatsApp.
+  code('Conferir ManyChat', [], `
+const r = $input.first().json;
+if (r.error || r.status === 'error') throw new Error('Cliente do Instagram NÃO foi avisado, avise por lá: ' + String(r.error?.message ?? r.message ?? r.error).slice(0, 150));
+return [];`),
 ], [
   ['Do WhatsApp', 'Interpretar'], ['Do painel', 'Interpretar'], ['Interpretar', 'Executar'], ['Executar', 'Responder'], ['Responder', 'Destino'],
-  ['Destino', 'Enviar', 0], ['Destino', 'ManyChat sendContent', 1], ['Destino', 'Resposta ao painel', 2],
+  ['Destino', 'Enviar', 0], ['Destino', 'Resposta ao painel', 1], ['Destino', 'ManyChat sendContent', 2], ['ManyChat sendContent', 'Conferir ManyChat'],
 ]);
 
 const agenda = workflow(W.agenda, '01 · Agenda do grupo + lembrete de story', [

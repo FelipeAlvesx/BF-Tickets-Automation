@@ -22,6 +22,8 @@ comprovante_url   (a coleta de imagem grava aqui a foto do comprovante)
 
 **Automation → My Automations → Instagram Default Reply** (já existe, parada) → **Edit Automation**.
 Deixe **STOPPED** até o fim dos testes (Go Live ativa para clientes reais).
+Clique no gatilho **Default Reply** e marque **every time** (o padrão "once per 24 hours" só
+repassa a primeira DM do dia de cada contato, e a conversa trava no segundo passo).
 
 ```
 [Trigger] User sends a Direct Message (Default Reply)

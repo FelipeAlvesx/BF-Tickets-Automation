@@ -99,7 +99,7 @@ export function formatarResposta(c, rows = []) {
       const chave = c.cmd === 'aprovar' ? 'pedido_aprovado' : 'pedido_recusado';
       const txt = textoBot(p.textos, chave, { pedido_id: p.id, evento: p.evento ?? '', motivo: p.motivo_recusa ? ` Motivo: ${p.motivo_recusa}.` : '' });
       return {
-        admin: `Pedido #${p.id} ${p.status} ✅ Cliente avisado (${p.canal}).`,
+        admin: `Pedido #${p.id} ${p.status} ✅ ${p.canal === 'instagram' ? 'Aviso ao cliente enviado pelo Instagram (se falhar, chega um alerta aqui).' : 'Cliente avisado (whatsapp).'}`,
         cliente: { canal: p.canal, contato_id: p.contato_id, mensagens: [{ tipo: 'texto', texto: txt }] },
       };
     }
