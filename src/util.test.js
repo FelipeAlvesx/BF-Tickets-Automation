@@ -62,7 +62,8 @@ test('comandos: SQL e respostas', () => {
   const r = formatarResposta({ cmd: 'aprovar', id: 7 }, [{ id: 7, canal: 'instagram', contato_id: '99', status: 'aprovado', evento: 'Pagode', textos: {} }]);
   assert.match(r.admin, /#7 aprovado/);
   assert.deepEqual([r.cliente.canal, r.cliente.contato_id], ['instagram', '99']);
-  assert.match(r.cliente.mensagens[0].texto, /#7 aprovado/);
+  assert.match(r.cliente.mensagens[0].texto, /Pagode foi aprovado/);
+  assert.doesNotMatch(r.cliente.mensagens[0].texto, /#7/);
   const rec = formatarResposta({ cmd: 'recusar', id: 7 }, [{ id: 7, canal: 'whatsapp', contato_id: '1', status: 'recusado', motivo_recusa: 'valor', textos: {} }]);
   assert.match(rec.cliente.mensagens[0].texto, /Motivo: valor/);
   assert.match(formatarResposta({ cmd: 'aprovar', id: 9 }, [{}]).admin, /não está pronto pra aprovar/);

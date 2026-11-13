@@ -1,6 +1,5 @@
 // Percorre os fluxos do bot com payloads falsos da Evolution (ver scripts/simular.sh).
-// Atenção: os fluxos de compra (pix/link/admin/tudo) assumem os 2 eventos de EXEMPLO do seed; com eventos
-// reais cadastrados rode só agenda|falha|pula|instagram.
+// Os fluxos de compra usam o primeiro evento ativo (funciona com 1 ou vários). Precisa de ao menos 1 evento ativo.
 // Uso: node scripts/simular.mjs [pix|link|admin|instagram|agenda|falha|pula|tudo]
 import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
@@ -53,8 +52,8 @@ async function fluxoPix() {
   let r = await manda(c, txt('oi'));
   assert.match(doCliente(r, c), /Como posso ajudar/);
   r = await manda(c, txt('1'));
-  assert.match(doCliente(r, c), /Pra qual evento/);
-  r = await manda(c, txt('1'));
+  // Com 1 evento ativo o bot pula a escolha do evento; com vários, escolhe o primeiro.
+  if (/Pra qual evento/.test(doCliente(r, c))) r = await manda(c, txt('1'));
   assert.match(doCliente(r, c), /Quantos ingressos/);
   r = await manda(c, txt('2'));
   assert.match(doCliente(r, c), /Como prefere pagar/);
@@ -77,8 +76,9 @@ async function fluxoPix() {
 async function fluxoLink() {
   const c = `55719${String(seq).slice(-8)}`;
   console.log(`\n▶ Fluxo link (${c})`);
-  const r = await manda(c, txt('quero 3 ingressos pro pagode'));
-  assert.match(doCliente(r, c), /3x Pagode/);
+  let r = await manda(c, txt('quero 3 ingressos'));
+  if (/Pra qual evento/.test(doCliente(r, c))) r = await manda(c, txt('1'));
+  assert.match(doCliente(r, c), /3x /);
   const l = await manda(c, txt('link'));
   assert.ok(l.some((m) => /^https:\/\//.test(m.text)), 'link isolado');
   assert.equal(sql(`select estado from app.conversas where contato_id='${c}'`), 'inicio');
@@ -91,6 +91,7 @@ async function admin(id, c) {
   r = await manda(ADMIN, txt(`/aprovar ${id}`));
   assert.equal(sql(`select status from app.pedidos where id=${id}`), 'aprovado');
   assert.match(doCliente(r, c), /aprovado/);
+  assert.doesNotMatch(doCliente(r, c), new RegExp(`#${id}`), 'número do pedido só para o admin');
   assert.equal(sql(`select estado from app.conversas where contato_id='${c}'`), 'inicio');
 }
 
@@ -103,12 +104,13 @@ async function idempotencia() {
   await espera(5000);
   assert.equal((await log()).filter((m) => m.number === c).length, 1, 'webhook repetido não responde duas vezes');
   const antes = (await log()).length;
+  const evento = sql('select nome from app.eventos where ativo and data_evento > now() order by data_evento limit 1');
   await post(payload(c, txt('quero comprar')));
-  await post(payload(c, txt('o festival verão')));
+  await post(payload(c, txt(`o ${evento.toLowerCase()}`)));
   await espera(6000);
   const juntas = (await log()).slice(antes).filter((m) => m.number === c);
   assert.equal(juntas.length, 1, 'debounce junta as duas');
-  assert.match(juntas[0].text, /Festival Verão Bahia/);
+  assert.ok(juntas[0].text.includes(evento), `responde sobre ${evento}`);
   await manda(c, txt('oi, aqui é o atendente'), { fromMe: true });
   assert.equal(sql(`select estado from app.conversas where contato_id='${c}'`), 'humano');
   const r = await manda(c, txt('alô?'));

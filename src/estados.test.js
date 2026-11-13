@@ -56,7 +56,9 @@ test('fluxo Pix completo', () => {
   const validar = s[8].acoes[0].mensagens[0].texto;
   assert.match(validar, /\/aprovar 42/);
   assert.match(validar, /\*\*\*\.982\.247-\*\*/);
-  assert.match(textos(s[9]), /#42 ainda está em validação/);
+  assert.match(textos(s[9]), /ainda está em validação/);
+  // Número do pedido só para o admin.
+  assert.doesNotMatch(textos(s[8]) + textos(s[9]), /#42/);
   assert.match(s[4].mensagens[2].texto, /manda aqui o comprovante/);
 });
 

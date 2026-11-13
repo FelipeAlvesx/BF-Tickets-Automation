@@ -66,7 +66,9 @@ Sem o painel, rode `make instancia`: ele salva o QR em `qr.png`.
 
 - De **outro** celular, mande "oi" para o número do bot. Ele responde com o menu.
 - Do celular do **admin**, mande `/ajuda` para o bot.
-- Sem celular nenhum, rode a simulação. Ela usa uma Evolution falsa e percorre o Pix completo, o link, o admin, o Instagram e a agenda:
+- Sem celular nenhum, rode a simulação. Ela usa uma Evolution falsa e percorre o Pix completo, o link, o admin, o Instagram e a agenda.
+  Enquanto ela roda, o n8n inteiro fala com a Evolution falsa: **só rode com ninguém usando o bot e nunca na VPS**
+  (o script se recusa se houve conversa real nos últimos 15 min):
 
 ```bash
 make simular
