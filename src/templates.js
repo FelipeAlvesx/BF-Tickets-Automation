@@ -13,6 +13,8 @@ export const TEXTOS_PADRAO = {
   link_fim: 'Qualquer dúvida é só chamar 😉',
   resumo_pix: 'Resumo do pedido:\n🎟 {evento}\n🔢 {quantidade} ingresso(s)\n💰 Total: {total}\n\nA chave Pix vem na próxima mensagem 👇',
   pix_instrucao: 'Titular: {pix_titular} ({pix_banco}).\nDepois de pagar, manda aqui o comprovante (foto ou print).',
+  // Instagram: o pedido do comprovante é a pergunta da coleta de imagem do ManyChat (manychat/SETUP.md).
+  pix_titular: 'Titular: {pix_titular} ({pix_banco}).',
   lembrar_comprovante: 'Tô aguardando o comprovante do Pix (foto ou print) pra seguir com o pedido.',
   comprovante_recebido: 'Comprovante recebido ✅\nAgora preciso de alguns dados pra emitir o ingresso.\nQual seu nome completo?',
   nome_invalido: 'Me manda o nome completo, por favor (nome e sobrenome).',

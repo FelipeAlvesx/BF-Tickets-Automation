@@ -27,16 +27,23 @@ repassa a primeira DM do dia de cada contato, e a conversa trava no segundo pass
 
 ```
 [Trigger] User sends a Direct Message (Default Reply)
-   │
+   │  Then
    ▼
-[Condition]  estado  is  aguardando_comprovante
-   ├─ Sim ─▶ [Send Message #1]  só a pergunta da Data Collection (sem texto separado):
-   │            "Manda aqui o comprovante do Pix: uma foto só (print ou imagem), numa única mensagem."
-   │            Reply Type = Image, salvar em comprovante_url
-   │            │  (Next Step)
-   │            ▼
-   └─ Não ──▶ [Send Message]  com um bloco Dynamic (o mesmo passo nos dois caminhos)
+[Send Message]  bloco Dynamic → n8n   ◀──────────────────────────────┐
+   │  Next Step                                                       │
+   ▼                                                                  │
+[Condition]  estado  is  aguardando_comprovante                       │
+   ├─ Sim ─▶ [Send Message #1]  só a Data Collection (sem texto separado):
+   │            "Depois de pagar, manda aqui o comprovante: uma foto ou print só, numa única mensagem."
+   │            Reply Type = Image, salvar em comprovante_url, expira em 23 horas
+   │            └─ Next Step ─────────────────────────────────────────┘
+   └─ Não ──▶ (nada: a conversa espera a próxima DM)
 ```
+
+Por que assim: o ManyChat **não manda a foto** no `last_input_text` (só o último texto), então a imagem só chega
+ao n8n pela Data Collection. Abrindo a coleta logo depois da resposta com a chave Pix, a **primeira** foto do cliente
+já é capturada. No Instagram o bot manda só "Titular: …" (texto `pix_titular`); o pedido do comprovante é a pergunta
+da coleta. O "Não" da Condition fica **vazio**: ligar ao Dynamic cria um laço infinito.
 
 No passo **Send Message** apague o texto vazio (X ao lado do campo), clique em **More → Dynamic**.
 Não use *Actions → External Request*: ele só guarda a resposta em campos, não envia as mensagens.

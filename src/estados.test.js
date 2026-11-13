@@ -57,6 +57,14 @@ test('fluxo Pix completo', () => {
   assert.match(validar, /\/aprovar 42/);
   assert.match(validar, /\*\*\*\.982\.247-\*\*/);
   assert.match(textos(s[9]), /#42 ainda está em validação/);
+  assert.match(s[4].mensagens[2].texto, /manda aqui o comprovante/);
+});
+
+test('Pix no Instagram: o pedido do comprovante fica com a coleta do ManyChat', () => {
+  const s = conversa(['oi', '1', '1', '2', 'pix'].map((texto) => ({ canal: 'instagram', texto })));
+  assert.equal(s[4].estado, 'aguardando_comprovante');
+  assert.equal(s[4].mensagens.length, 3);
+  assert.equal(s[4].mensagens[2].texto, 'Titular: BF Tickets (Nubank).');
 });
 
 test('fluxo link termina e volta ao início', () => {

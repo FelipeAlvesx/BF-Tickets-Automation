@@ -232,7 +232,9 @@ function executar(ctx, respostaLLM) {
         c.falhas = 0;
         msg('resumo_pix', vPedido());
         mensagens.push({ tipo: 'texto', texto: String(cfg.pix_chave ?? '') });
-        msg('pix_instrucao', { pix_titular: cfg.pix_titular ?? '', pix_banco: cfg.pix_banco ?? '' });
+        // No Instagram quem pede o comprovante é a coleta de imagem do ManyChat, aberta logo depois
+        // desta resposta: assim a primeira foto do cliente já é capturada (sem mandar duas vezes).
+        msg(ctx.canal === 'instagram' ? 'pix_titular' : 'pix_instrucao', { pix_titular: cfg.pix_titular ?? '', pix_banco: cfg.pix_banco ?? '' });
       } else if (op === 1 || /\b(link|cartao|credito|site)\b/.test(n)) {
         msg('enviar_link');
         mensagens.push({ tipo: 'texto', texto: e.link_compra });
