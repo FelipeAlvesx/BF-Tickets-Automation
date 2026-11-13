@@ -59,8 +59,11 @@ export function sqlComando(c, { pausaHoras = 12 } = {}) {
     case 'aprovar':
     case 'recusar': {
       const status = c.cmd === 'aprovar' ? 'aprovado' : 'recusado';
+      // Aprovar só com os dados completos (nome, CPF, e-mail): antes disso não há como emitir o ingresso.
+      // Recusar vale em qualquer etapa aberta (ex.: comprovante falso).
+      const pode = c.cmd === 'aprovar' ? "('aguardando_validacao')" : ABERTOS;
       return `with p as (update app.pedidos set status=${lit(status)}, motivo_recusa=${lit(c.motivo ?? null)}, atualizado_em=now()
-  where id=${Number(c.id)} and status in ${ABERTOS} returning *),
+  where id=${Number(c.id)} and status in ${pode} returning *),
 cv as (update app.conversas cv set estado='inicio', contexto='{}'::jsonb, atualizado_em=now()
   from p where cv.canal=p.canal and cv.contato_id=p.contato_id and cv.contexto->>'pedido_id'=p.id::text)
 select p.id, p.canal, p.contato_id, p.quantidade, p.valor_total, p.status, p.motivo_recusa, e.nome as evento, ${TEXTOS}
@@ -95,7 +98,12 @@ export function formatarResposta(c, rows = []) {
     case 'aprovar':
     case 'recusar': {
       const p = rows[0];
-      if (!p) return { admin: `Pedido #${c.id} não encontrado ou já finalizado.`, cliente: null };
+      if (!p) return {
+        admin: c.cmd === 'aprovar'
+          ? `Pedido #${c.id} não está pronto pra aprovar: não existe, já foi finalizado ou o cliente ainda está mandando nome, CPF e e-mail. Aprove quando chegar o aviso "✅ pronto pra validar".`
+          : `Pedido #${c.id} não encontrado ou já finalizado.`,
+        cliente: null,
+      };
       const chave = c.cmd === 'aprovar' ? 'pedido_aprovado' : 'pedido_recusado';
       const txt = textoBot(p.textos, chave, { pedido_id: p.id, evento: p.evento ?? '', motivo: p.motivo_recusa ? ` Motivo: ${p.motivo_recusa}.` : '' });
       return {

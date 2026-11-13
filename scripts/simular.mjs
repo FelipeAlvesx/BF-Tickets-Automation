@@ -175,6 +175,21 @@ async function instagram() {
   r = await passo({ comprovante_url: 'https://lookaside.fbsbx.com/ig_messaging_cdn/?asset_id=1&signature=abc' });
   assert.equal(r.estado, 'coletando_nome');
   assert.match(sql(`select comprovante_url from app.pedidos where canal='instagram' and contato_id='${ig}'`), /lookaside/);
+  const id = sql(`select id from app.pedidos where canal='instagram' and contato_id='${ig}'`);
+  // Aprovar pelo painel antes dos dados é recusado (não encerra a conversa no meio).
+  const aprovar = async () => (await (await fetch(`${N8N}/webhook/painel-admin`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-painel-token': process.env.PAINEL_TOKEN }, body: JSON.stringify({ texto: `/aprovar ${id}` }) })).json()).texto;
+  assert.match(await aprovar(), /não está pronto/);
+  r = await passo({ texto: 'Bia Teste Silva' });
+  assert.equal(r.estado, 'coletando_cpf');
+  r = await passo({ texto: '111.444.777-35' });
+  assert.equal(r.estado, 'coletando_email');
+  r = await passo({ texto: 'bia@exemplo.com' });
+  assert.equal(r.estado, 'aguardando_validacao');
+  const texto = await aprovar();
+  console.log(`  → /aprovar ${id} pelo painel\n    🧑‍💼 ${texto}`);
+  assert.match(texto, /aprovado/);
+  assert.equal(sql(`select status from app.pedidos where id=${id}`), 'aprovado');
+  assert.equal(sql(`select estado from app.conversas where canal='instagram' and contato_id='${ig}'`), 'inicio');
 }
 
 // Imagem fora do ar: a legenda e o link do story ainda chegam, e o admin recebe o alerta.

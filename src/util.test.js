@@ -65,7 +65,11 @@ test('comandos: SQL e respostas', () => {
   assert.match(r.cliente.mensagens[0].texto, /#7 aprovado/);
   const rec = formatarResposta({ cmd: 'recusar', id: 7 }, [{ id: 7, canal: 'whatsapp', contato_id: '1', status: 'recusado', motivo_recusa: 'valor', textos: {} }]);
   assert.match(rec.cliente.mensagens[0].texto, /Motivo: valor/);
-  assert.match(formatarResposta({ cmd: 'aprovar', id: 9 }, [{}]).admin, /não encontrado/);
+  assert.match(formatarResposta({ cmd: 'aprovar', id: 9 }, [{}]).admin, /não está pronto pra aprovar/);
+  assert.match(formatarResposta({ cmd: 'recusar', id: 9 }, [{}]).admin, /não encontrado/);
+  // Aprovar só com nome/CPF/e-mail completos; recusar em qualquer etapa aberta.
+  assert.match(sqlComando({ cmd: 'aprovar', id: 3 }), /status in \('aguardando_validacao'\)/);
+  assert.match(sqlComando({ cmd: 'recusar', id: 3 }), /'coletando_dados'/);
   assert.match(formatarResposta({ cmd: 'pedidos' }, [{ id: 1, status: 'aguardando_validacao', quantidade: 2, evento: 'X', valor_total: 10, canal: 'whatsapp', contato_id: '1', cpf: '529.982.247-25' }]).admin, /\*\*\*\.982/);
   assert.match(formatarResposta({ cmd: 'ajuda' }).admin, /\/aprovar/);
 });

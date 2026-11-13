@@ -88,7 +88,9 @@ function DetalhePedido({ pedido: p, onClose, onFeito }: { pedido: Pedido | null;
         </form>
       ) : (
         <>
-          <button className="btn-primary flex-1" disabled={ocupado} onClick={() => agir('aprovar')}>{ocupado ? <Spinner /> : <Check className="size-4" />}Aprovar e avisar o cliente</button>
+          {p.status === 'aguardando_validacao'
+            ? <button className="btn-primary flex-1" disabled={ocupado} onClick={() => agir('aprovar')}>{ocupado ? <Spinner /> : <Check className="size-4" />}Aprovar e avisar o cliente</button>
+            : <p className="flex-1 text-sm text-muted">Dá pra aprovar quando o cliente mandar nome, CPF e e-mail.</p>}
           <button className="btn-quiet" onClick={() => setRecusando(true)}>Recusar</button>
         </>
       ))}>

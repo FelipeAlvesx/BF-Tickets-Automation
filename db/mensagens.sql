@@ -31,8 +31,8 @@ Como prefere pagar?
 
 A chave Pix vem na próxima mensagem 👇'),
   ('pix_instrucao', 'Titular: {pix_titular} ({pix_banco}).
-Depois de pagar, manda aqui o comprovante (foto ou PDF).'),
-  ('lembrar_comprovante', 'Tô aguardando o comprovante do Pix (foto ou PDF) pra seguir com o pedido.'),
+Depois de pagar, manda aqui o comprovante (foto ou print).'),
+  ('lembrar_comprovante', 'Tô aguardando o comprovante do Pix (foto ou print) pra seguir com o pedido.'),
   ('comprovante_recebido', 'Comprovante recebido ✅
 Agora preciso de alguns dados pra emitir o ingresso.
 Qual seu nome completo?'),
@@ -65,7 +65,9 @@ Se precisar, é só chamar.'),
   ('midia_nao_suportada', 'Por aqui só consigo ler texto, foto ou PDF. Pode escrever?'),
   ('admin_comprovante', '🧾 Comprovante recebido — pedido #{pedido_id}
 {canal} · {contato}
-{quantidade}x {evento} = {total}'),
+{quantidade}x {evento} = {total}
+
+Ainda faltam nome, CPF e e-mail do cliente. O aviso pra aprovar chega em seguida.'),
   ('admin_validar', '✅ Pedido #{pedido_id} pronto pra validar
 {quantidade}x {evento} = {total}
 {nome_cliente_completo} · CPF {cpf_mascarado} · {email}
