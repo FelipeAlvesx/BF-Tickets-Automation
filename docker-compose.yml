@@ -175,6 +175,10 @@ services:
       EVOLUTION_WEBHOOK: http://n8n:5678/webhook/evolution
       N8N_URL: http://n8n:5678
       MANYCHAT_API_KEY: ${MANYCHAT_API_KEY:-}
+      # Texto da agenda gerado a partir da arte (botão "Gerar com IA")
+      LLM_BASE_URL: ${LLM_BASE_URL}
+      LLM_API_KEY: ${LLM_API_KEY}
+      LLM_MODEL: ${LLM_MODEL}
       LINK_N8N: ${LINK_N8N:-http://localhost:5679}
       LINK_NOCODB: ${LINK_NOCODB:-http://localhost:8096}
       WEBHOOK_URL: ${WEBHOOK_URL}

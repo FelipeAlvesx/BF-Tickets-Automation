@@ -9,6 +9,7 @@
     "start": "node api/server.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "1.3.0",
     "pg": "8.13.1"
   },
   "devDependencies": {

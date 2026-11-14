@@ -4,7 +4,9 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import pg from 'pg';
+import Anthropic from '@anthropic-ai/sdk';
 import { tabela, sqlInserir, sqlAtualizar, sqlApagar, autorizado } from './crud.mjs';
+import { pedidoLegenda, lerLegenda } from './legenda.mjs';
 
 const E = process.env;
 const INST = E.EVOLUTION_INSTANCE;
@@ -106,6 +108,57 @@ async function comandoAdmin(texto) {
   return j;
 }
 
+// ── imagens da agenda ──
+// Ficam no Postgres (já está no backup) e saem em /img/<uuid>.jpg sem login: a Evolution busca pela rede
+// interna (http://painel:8080) e o id não é adivinhável. A arte vai para um grupo, não é dado sensível.
+const IMG = /^\/img\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jpg$/;
+const ia = E.LLM_API_KEY ? new Anthropic({ apiKey: E.LLM_API_KEY, baseURL: E.LLM_BASE_URL || undefined, timeout: 60000, maxRetries: 1 }) : null;
+
+async function servirImagem(id, res) {
+  try {
+    const [r] = await q('select dados from app.imagens where id=$1', [id]);
+    if (!r) return res.writeHead(404).end();
+    res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' }).end(r.dados);
+  } catch (e) {
+    console.error('img', e);
+    res.writeHead(500).end();
+  }
+}
+
+async function salvarImagem(b) {
+  const dados = Buffer.from(String(b.base64 ?? ''), 'base64');
+  if (dados.length < 4 || dados[0] !== 0xff || dados[1] !== 0xd8) throw erro(400, 'A imagem precisa chegar em JPG.');
+  if (dados.length > 5e6) throw erro(413, 'Imagem grande demais (máx. 5 MB).');
+  // Faxina: imagem enviada e nunca salva numa linha (drawer cancelado) some depois de 1 dia.
+  await q(`delete from app.imagens i where criado_em < now() - interval '1 day'
+    and not exists (select 1 from app.agenda a where a.imagem_url = '/img/' || i.id || '.jpg')
+    and not exists (select 1 from app.eventos e where e.imagem_url = '/img/' || i.id || '.jpg')`);
+  const [r] = await q('insert into app.imagens (dados) values ($1) returning id', [dados]);
+  return { url: `/img/${r.id}.jpg` };
+}
+
+async function gerarLegenda(b) {
+  if (!ia) throw erro(400, 'Falta LLM_API_KEY no .env (a mesma chave do bot) para gerar texto.');
+  const u = String(b.imagem_url ?? '');
+  let imagem;
+  const id = u.match(IMG)?.[1];
+  if (id) {
+    const [r] = await q('select dados from app.imagens where id=$1', [id]);
+    if (!r) throw erro(404, 'Imagem não encontrada. Envie de novo.');
+    imagem = { type: 'base64', media_type: 'image/jpeg', data: r.dados.toString('base64') };
+  } else if (/^https:\/\//.test(u)) imagem = { type: 'url', url: u };
+  else throw erro(400, 'Envie uma imagem primeiro.');
+  const eventos = await q('select id, nome, data_evento from app.eventos where ativo and data_evento > now() order by data_evento');
+  let resp;
+  try {
+    resp = await ia.messages.create(pedidoLegenda({ modelo: E.LLM_MODEL || 'claude-haiku-5-5', imagem, eventos, eventoId: Number(b.evento_id) || null }));
+  } catch (e) {
+    if (e instanceof Anthropic.APIError) throw erro(502, `A IA recusou o pedido (${e.status ?? 'sem resposta'}): ${e.error?.error?.message ?? e.message}`);
+    throw e;
+  }
+  return lerLegenda(resp, eventos);
+}
+
 async function saude(url) {
   try {
     const r = await fetch(url, { signal: AbortSignal.timeout(4000) });
@@ -187,6 +240,9 @@ const rotas = [
     res.end(Buffer.from(m.base64, 'base64'));
   }],
 
+  ['POST', '/api/imagens', async (_, b) => salvarImagem(b)],
+  ['POST', '/api/legenda', async (_, b) => gerarLegenda(b)],
+
   ['GET', /^\/api\/t\/(\w+)$/, async ([t]) => q(tabela(t).listar)],
   ['POST', /^\/api\/t\/(\w+)$/, async ([t], b) => { const s = sqlInserir(t, b); return (await q(s.text, s.values))[0]; }],
   ['PUT', /^\/api\/t\/(\w+)\/([^/]+)$/, async ([t, pk], b) => {
@@ -234,7 +290,7 @@ async function estatico(path, res) {
 
 async function lerCorpo(req) {
   let s = '';
-  for await (const c of req) { s += c; if (s.length > 1e6) throw erro(413, 'Corpo grande demais.'); }
+  for await (const c of req) { s += c; if (s.length > 8e6) throw erro(413, 'Corpo grande demais.'); } // imagem em base64
   if (!s) return {};
   try { return JSON.parse(s); } catch { throw erro(400, 'JSON inválido.'); }
 }
@@ -242,6 +298,8 @@ async function lerCorpo(req) {
 export const servidor = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   if (url.pathname === '/saude') return res.writeHead(200).end('ok');
+  const img = req.method === 'GET' && url.pathname.match(IMG);
+  if (img) return servirImagem(img[1], res);
   if (!autorizado(req.headers.authorization, E.PAINEL_USUARIO, E.PAINEL_SENHA)) {
     return res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="BF Tickets", charset="UTF-8"' }).end('Login necessário');
   }
@@ -266,4 +324,6 @@ export const servidor = http.createServer(async (req, res) => {
 });
 
 if (!E.PAINEL_SENHA) { console.error('PAINEL_SENHA vazia: o painel não sobe sem senha.'); process.exit(1); }
+// Tabela criada aqui (não no init.sql) para valer também em banco que já existe.
+await q('create table if not exists app.imagens (id uuid primary key default gen_random_uuid(), dados bytea not null, criado_em timestamptz not null default now())');
 servidor.listen(8080, () => console.log('painel em :8080'));

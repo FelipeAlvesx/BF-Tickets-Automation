@@ -97,5 +97,6 @@ test('agenda: grupo com imagem e lembrete de story com link isolado', () => {
   assert.equal(story[2].texto, 'https://l');
   const so = mensagensAgenda({ texto: 'oi', enviar_grupo: false, lembrete_story: false });
   assert.deepEqual(so, { grupo: null, story: null });
+  assert.equal(mensagensAgenda({ texto: 'oi', enviar_grupo: true, imagem_url: '/img/a.jpg' }).grupo[0].url, 'http://painel:8080/img/a.jpg');
   assert.equal(jitterSegundos(() => 0.999), 60);
 });

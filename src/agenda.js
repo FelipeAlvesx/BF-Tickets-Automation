@@ -24,11 +24,15 @@ select a.*, to_jsonb(e) as evento,
 from reivindicadas r join app.agenda a on a.id=r.agenda_id left join app.eventos e on e.id=a.evento_id`;
 }
 
+// Imagem enviada pelo painel fica em /img/<id>.jpg; a Evolution busca pela rede interna do compose.
+const PAINEL_INTERNO = 'http://painel:8080';
+
 // Monta as mensagens de uma linha: {grupo: [...] | null, story: [...] | null}.
 export function mensagensAgenda(linha, textos = {}) {
   const e = linha.evento ?? null;
   const legenda = render(linha.texto ?? '', varsEvento(e));
-  const imagem = linha.imagem_url || e?.imagem_url || null;
+  const url = linha.imagem_url || e?.imagem_url || null;
+  const imagem = url?.startsWith('/img/') ? PAINEL_INTERNO + url : url;
   const grupo = linha.enviar_grupo ? [imagem ? { tipo: 'imagem', url: imagem, texto: legenda } : { tipo: 'texto', texto: legenda }] : null;
   let story = null;
   if (linha.lembrete_story) {

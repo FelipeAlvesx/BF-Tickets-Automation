@@ -8,6 +8,6 @@ export default defineConfig({
   resolve: { alias: { '@': '/src' } },
   server: {
     port: 5196,
-    proxy: { '/api': { target: process.env.PAINEL_URL || 'http://localhost:5195', changeOrigin: true, auth: process.env.PAINEL_AUTH } },
+    proxy: Object.fromEntries(['/api', '/img'].map(p => [p, { target: process.env.PAINEL_URL || 'http://localhost:5195', changeOrigin: true, auth: process.env.PAINEL_AUTH }])),
   },
 })
