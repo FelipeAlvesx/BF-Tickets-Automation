@@ -2,7 +2,7 @@
 // parse -> SQL -> texto de resposta. O painel usa o mesmo caminho.
 
 import { soDigitos, mascararCpf } from './cpf.js';
-import { textoBot, formatarPreco, formatarData } from './templates.js';
+import { textoBot, formatarPreco, formatarData, ticketeira } from './templates.js';
 import { lit } from './sql.js';
 import { variantesNumero } from './canais.js';
 
@@ -66,7 +66,7 @@ export function sqlComando(c, { pausaHoras = 12 } = {}) {
   where id=${Number(c.id)} and status in ${pode} returning *),
 cv as (update app.conversas cv set estado='inicio', contexto='{}'::jsonb, atualizado_em=now()
   from p where cv.canal=p.canal and cv.contato_id=p.contato_id and cv.contexto->>'pedido_id'=p.id::text)
-select p.id, p.canal, p.contato_id, p.quantidade, p.valor_total, p.status, p.motivo_recusa, e.nome as evento, ${TEXTOS}
+select p.id, p.canal, p.contato_id, p.quantidade, p.valor_total, p.status, p.motivo_recusa, e.nome as evento, e.ticketeira, ${TEXTOS}
 from p left join app.eventos e on e.id=p.evento_id`;
     }
     case 'pedidos':
@@ -105,7 +105,7 @@ export function formatarResposta(c, rows = []) {
         cliente: null,
       };
       const chave = c.cmd === 'aprovar' ? 'pedido_aprovado' : 'pedido_recusado';
-      const txt = textoBot(p.textos, chave, { pedido_id: p.id, evento: p.evento ?? '', motivo: p.motivo_recusa ? ` Motivo: ${p.motivo_recusa}.` : '' });
+      const txt = textoBot(p.textos, chave, { pedido_id: p.id, evento: p.evento ?? '', ticketeira: ticketeira(p), motivo: p.motivo_recusa ? ` Motivo: ${p.motivo_recusa}.` : '' });
       return {
         admin: `Pedido #${p.id} ${p.status} ✅ ${p.canal === 'instagram' ? 'Aviso ao cliente enviado pelo Instagram (se falhar, chega um alerta aqui).' : 'Cliente avisado (whatsapp).'}`,
         cliente: { canal: p.canal, contato_id: p.contato_id, mensagens: [{ tipo: 'texto', texto: txt }] },

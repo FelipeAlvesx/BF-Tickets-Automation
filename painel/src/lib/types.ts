@@ -16,14 +16,14 @@ export interface ConversaItem {
 export interface Pedido {
   id: number; canal: Canal; contato_id: string; evento: string | null; evento_id: number; quantidade: number; valor_total: string
   forma: string; status: string; comprovante_url: string | null; nome: string | null; cpf: string | null; email: string | null
-  motivo_recusa: string | null; criado_em: string; atualizado_em: string; nome_contato?: string | null
+  telefone: string | null; motivo_recusa: string | null; criado_em: string; atualizado_em: string; nome_contato?: string | null
 }
 export interface ConversaDetalhe {
   conversa: ConversaItem & { contexto: Record<string, unknown> }
   historico: { direcao: 'in' | 'out' | 'humano'; texto: string; criado_em: string }[]
   pedidos: Pedido[]
 }
-export interface Evento { id: number; nome: string; data_evento: string; local: string | null; link_compra: string | null; preco: string; imagem_url: string | null; ativo: boolean }
+export interface Evento { id: number; nome: string; data_evento: string; local: string | null; link_compra: string | null; preco: string; imagem_url: string | null; ticketeira: string | null; ativo: boolean }
 export interface LinhaAgenda {
   id: number; horario: string; dias_semana: number[]; texto: string; imagem_url: string | null; evento_id: number | null
   enviar_grupo: boolean; lembrete_story: boolean; ativo: boolean; evento: string | null; evento_ativo: boolean | null; evento_passou: boolean | null; enviado_hoje: boolean

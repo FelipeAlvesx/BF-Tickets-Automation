@@ -3,15 +3,16 @@
 // processar(ctx, respostaLLM) -> {mensagens, acoes, estado, contexto, pausado_ate, efeitos}.
 // respostaLLM = objeto cru da API (ou {} se a chamada falhou).
 
-import { textoBot, varsEvento, listaEventos, formatarPreco } from './templates.js';
+import { textoBot, varsEvento, listaEventos, formatarPreco, ticketeira } from './templates.js';
 import { atalhos, intencaoGlobal, opcaoMenu, extrairQuantidade, acharEvento, normalizar, pedidoLLM, lerRespostaLLM } from './extrator.js';
-import { validarCpf, validarEmail, soDigitos, formatarCpf, mascararCpf } from './cpf.js';
+import { validarEmail, formatarCpf, mascararCpf, extrairDados } from './cpf.js';
 
 export const MAX_QTD = 10;
 const CONFIANCA_MIN = 0.6;
 const EXPIRA_MS = 24 * 3600 * 1000;
 const PRECISA_LLM = Symbol('precisa_llm');
-const ESTADOS_COM_PEDIDO = ['aguardando_comprovante', 'coletando_nome', 'coletando_cpf', 'coletando_email'];
+const ESTADOS_COM_PEDIDO = ['aguardando_comprovante', 'coletando_dados'];
+const ESTADOS_ANTIGOS = ['coletando_nome', 'coletando_cpf', 'coletando_email']; // viraram coletando_dados
 
 export function processar(ctx, respostaLLM) {
   try {
@@ -33,6 +34,7 @@ function executar(ctx, respostaLLM) {
   const midia = ctx.midia ?? null;
 
   let estado = conv.estado || 'inicio';
+  if (ESTADOS_ANTIGOS.includes(estado)) estado = 'coletando_dados';
   let c = { ...(conv.contexto ?? {}) };
   let pausado_ate = conv.pausado_ate ?? null;
   const mensagens = [];
@@ -56,8 +58,9 @@ function executar(ctx, respostaLLM) {
   const primeiroNome = (ctx.nome ?? '').trim().split(/\s+/)[0];
   const vPedido = () => {
     const e = evento(c.evento_id);
-    return { pedido_id: c.pedido_id, evento: e?.nome ?? c.evento_nome ?? '', quantidade: c.quantidade, total: formatarPreco(c.total) };
+    return { pedido_id: c.pedido_id, evento: e?.nome ?? c.evento_nome ?? '', quantidade: c.quantidade, total: formatarPreco(c.total), ticketeira: ticketeira(e) };
   };
+  const querTelefone = ctx.canal === 'instagram'; // no WhatsApp o telefone é o próprio número
 
   // ── ações reutilizáveis ──
   const humano = () => {
@@ -166,8 +169,8 @@ function executar(ctx, respostaLLM) {
     if (estado === 'aguardando_comprovante') {
       efeitos.atualizarPedido = { id: c.pedido_id, comprovante_url: midia.url ?? midia.ref ?? null, status: 'coletando_dados' };
       admin.push({ ...midia, texto: textoBot(textos, 'admin_comprovante', { ...vPedido(), canal: ctx.canal, contato }) });
-      estado = 'coletando_nome';
-      msg('comprovante_recebido');
+      estado = 'coletando_dados';
+      msg('comprovante_recebido', { ...vPedido(), item_telefone: querTelefone ? '\n• Telefone com DDD' : '' });
       return fim();
     }
     // Mídia fora de hora (outro comprovante, print...): repassa para um humano.
@@ -252,35 +255,29 @@ function executar(ctx, respostaLLM) {
       if (!(a && ['duvida_evento', 'vender'].includes(a.intencao) && tratarIntencao(a))) msg('lembrar_comprovante');
       break;
     }
-    case 'coletando_nome': {
-      const nome = t.replace(/^(meu nome (e|é)|me chamo|sou o|sou a)\s+/i, '').replace(/\s+/g, ' ').trim();
-      if (/^[\p{L}'’.-]+(\s[\p{L}'’.-]+)+$/u.test(nome) && nome.length <= 100) {
-        c.nome_completo = nome;
-        efeitos.atualizarPedido = { id: c.pedido_id, nome };
-        estado = 'coletando_cpf';
-        msg('pedir_cpf');
-      } else msg('nome_invalido');
-      break;
-    }
-    case 'coletando_cpf': {
-      const m = t.match(/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/);
-      const cpf = m ? soDigitos(m[0]) : soDigitos(t);
-      if (validarCpf(cpf)) {
-        c.cpf_mascarado = mascararCpf(cpf); // CPF inteiro só em pedidos
-        efeitos.atualizarPedido = { id: c.pedido_id, cpf: formatarCpf(cpf) };
-        estado = 'coletando_email';
-        msg('pedir_email');
-      } else msg('cpf_invalido');
-      break;
-    }
-    case 'coletando_email': {
-      const email = (t.match(/[^\s@]+@[^\s@]+\.[a-z]{2,}/i) ?? [''])[0].toLowerCase();
-      if (validarEmail(email)) {
-        efeitos.atualizarPedido = { id: c.pedido_id, email, status: 'aguardando_validacao' };
+    case 'coletando_dados': {
+      // Pede tudo numa mensagem só, mas aceita aos poucos: guarda o que veio e cobra só o que falta.
+      const x = extrairDados(t, { telefone: querTelefone });
+      const d = (c.dados ??= {});
+      const up = {};
+      if (x.nome && !d.nome) up.nome = d.nome = x.nome;
+      if (x.cpf) { d.cpf_mascarado = mascararCpf(x.cpf); up.cpf = formatarCpf(x.cpf); } // CPF inteiro só em pedidos
+      if (x.email && validarEmail(x.email)) up.email = d.email = x.email;
+      if (x.telefone) up.telefone = d.telefone = x.telefone;
+      if (!querTelefone && !d.telefone) up.telefone = d.telefone = contato;
+      const v = vPedido();
+      const falta = [!d.nome && 'nome completo', !d.cpf_mascarado && 'CPF', !d.email && `e-mail da sua conta na ${v.ticketeira}`, !d.telefone && 'telefone com DDD'].filter(Boolean);
+      if (!falta.length) {
+        up.status = 'aguardando_validacao';
         estado = 'aguardando_validacao';
-        msg('aguardando_validacao', vPedido());
-        admin.push({ tipo: 'texto', texto: textoBot(textos, 'admin_validar', { ...vPedido(), nome_cliente_completo: c.nome_completo, cpf_mascarado: c.cpf_mascarado, email }) });
-      } else msg('email_invalido');
+        msg('aguardando_validacao', v);
+        const e = evento(c.evento_id);
+        admin.push({ tipo: 'texto', texto: textoBot(textos, 'admin_validar', { ...v, ticketeira_admin: e?.ticketeira || 'não cadastrada', nome_cliente_completo: d.nome, cpf_mascarado: d.cpf_mascarado, email: d.email, telefone: d.telefone }) });
+      } else {
+        if (x.cpfInvalido && !d.cpf_mascarado) msg('cpf_invalido');
+        msg('dados_faltando', { faltando: falta.length > 1 ? `${falta.slice(0, -1).join(', ')} e ${falta.at(-1)}` : falta[0] });
+      }
+      if (Object.keys(up).length) efeitos.atualizarPedido = { id: c.pedido_id, ...up };
       break;
     }
     case 'aguardando_validacao':

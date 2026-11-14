@@ -97,7 +97,7 @@ function DetalhePedido({ pedido: p, onClose, onFeito }: { pedido: Pedido | null;
       <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
         {[
           ['Evento', p.evento], ['Quantidade', `${p.quantidade} ingresso(s)`], ['Total', brl(Number(p.valor_total))], ['Forma', p.forma.toUpperCase()],
-          ['Nome completo', p.nome], ['CPF', p.cpf], ['E-mail', p.email], ['Contato', `${p.canal} · ${p.contato_id}`],
+          ['Nome completo', p.nome], ['CPF', p.cpf], ['E-mail', p.email], ['Telefone', p.telefone], ['Contato', `${p.canal} · ${p.contato_id}`],
           ['Criado', quando(p.criado_em)], ['Motivo da recusa', p.motivo_recusa],
         ].filter(([, v]) => v).map(([r, v]) => <div key={r}><dt className="text-faint">{r}</dt><dd className="break-words font-medium">{v}</dd></div>)}
       </dl>

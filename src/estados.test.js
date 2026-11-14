@@ -4,7 +4,7 @@ import { processar, lerValor } from './estados.js';
 import { sqlGravar, lit } from './sql.js';
 
 const EVENTOS = [
-  { id: 1, nome: 'Festival Verão Bahia', data_evento: '2026-12-20T22:00:00-03:00', local: 'Arena Fonte Nova', link_compra: 'https://bf.example/verao', preco: '150.00' },
+  { id: 1, nome: 'Festival Verão Bahia', data_evento: '2026-12-20T22:00:00-03:00', local: 'Arena Fonte Nova', link_compra: 'https://bf.example/verao', preco: '150.00', ticketeira: 'Ticketmaker' },
   { id: 2, nome: 'Pagode do Rio Vermelho', data_evento: '2026-12-05T20:00:00-03:00', local: 'Largo da Mariquita', link_compra: 'https://bf.example/pagode', preco: '60' },
 ];
 const CONFIG = { pix_chave: 'pix@bf.example', pix_titular: 'BF Tickets', pix_banco: 'Nubank', pausa_humano_horas: '12', bot_ligado: 'true' };
@@ -27,7 +27,7 @@ const textos = (r) => r.mensagens.map((m) => m.texto).join('\n');
 const respostaLLM = (json) => ({ content: [{ type: 'text', text: JSON.stringify(json) }] });
 
 test('fluxo Pix completo', () => {
-  const s = conversa(['oi', '1', '1', '2', 'pix', { midia: { tipo: 'imagem', mimetype: 'image/jpeg', ref: 'wa:ABC' } }, 'Ana Maria Souza', '529.982.247-25', 'ana@exemplo.com', 'e aí?']);
+  const s = conversa(['oi', '1', '1', '2', 'pix', { midia: { tipo: 'imagem', mimetype: 'image/jpeg', ref: 'wa:ABC' } }, 'Ana Maria Souza\n529.982.247-25\nana@exemplo.com', 'e aí?']);
   assert.equal(s[0].estado, 'inicio');
   assert.match(textos(s[0]), /Oi, Ana!/);
   assert.equal(s[1].estado, 'escolhendo_evento');
@@ -41,25 +41,39 @@ test('fluxo Pix completo', () => {
   assert.equal(s[4].mensagens.length, 3);
   assert.equal(s[4].mensagens[1].texto, 'pix@bf.example');
   // comprovante -> admin com mídia + resumo
-  assert.equal(s[5].estado, 'coletando_nome');
+  // comprovante -> pede todos os dados numa mensagem só, com a ticketeira do evento
+  assert.equal(s[5].estado, 'coletando_dados');
   assert.equal(s[5].efeitos.atualizarPedido.status, 'coletando_dados');
   assert.equal(s[5].efeitos.atualizarPedido.comprovante_url, 'wa:ABC');
+  assert.match(textos(s[5]), /Nome completo[\s\S]*CPF[\s\S]*E-mail da sua conta na Ticketmaker/);
+  assert.doesNotMatch(textos(s[5]), /Telefone/, 'no WhatsApp o telefone é o próprio número');
   const adm = s[5].acoes[0].mensagens[0];
   assert.equal(adm.tipo, 'imagem');
   assert.match(adm.texto, /pedido #42/);
-  assert.equal(s[6].estado, 'coletando_cpf');
-  assert.equal(s[7].estado, 'coletando_email');
-  assert.equal(s[7].efeitos.atualizarPedido.cpf, '529.982.247-25');
-  assert.ok(!JSON.stringify(s[7].contexto).includes('529.982.247-25'), 'CPF inteiro não fica no contexto');
-  assert.equal(s[8].estado, 'aguardando_validacao');
-  assert.equal(s[8].efeitos.atualizarPedido.status, 'aguardando_validacao');
-  const validar = s[8].acoes[0].mensagens[0].texto;
+  // tudo numa mensagem -> validação
+  assert.equal(s[6].estado, 'aguardando_validacao');
+  assert.deepEqual(s[6].efeitos.atualizarPedido, { id: 42, nome: 'Ana Maria Souza', cpf: '529.982.247-25', email: 'ana@exemplo.com', telefone: '5571999990000', status: 'aguardando_validacao' });
+  assert.ok(!JSON.stringify(s[6].contexto).includes('529.982.247-25'), 'CPF inteiro não fica no contexto');
+  const validar = s[6].acoes[0].mensagens[0].texto;
   assert.match(validar, /\/aprovar 42/);
   assert.match(validar, /\*\*\*\.982\.247-\*\*/);
-  assert.match(textos(s[9]), /ainda está em validação/);
+  assert.match(validar, /Ticketeira: Ticketmaker/);
+  assert.match(textos(s[7]), /ainda está em validação/);
   // Número do pedido só para o admin.
-  assert.doesNotMatch(textos(s[8]) + textos(s[9]), /#42/);
+  assert.doesNotMatch(textos(s[6]) + textos(s[7]), /#42/);
   assert.match(s[4].mensagens[2].texto, /manda aqui o comprovante/);
+});
+
+test('dados aos poucos: cobra só o que falta; Instagram pede telefone', () => {
+  const ig = (texto) => ({ canal: 'instagram', ...(typeof texto === 'string' ? { texto } : texto) });
+  const s = conversa(['1', '1', '2', 'pix', { midia: { tipo: 'imagem', url: 'https://cdn/x.jpg' } }, 'Ana Maria Souza', 'já paguei', '529.982.247-24', '529.982.247-25 ana@ex.com', '(71) 99999-8888'].map(ig));
+  assert.match(textos(s[4]), /Telefone com DDD/);
+  assert.match(textos(s[5]), /Ainda falta: CPF, e-mail da sua conta na Ticketmaker e telefone com DDD/);
+  assert.equal(s[6].estado, 'coletando_dados', '"já paguei" não vira nome nem avança');
+  assert.match(textos(s[7]), /CPF não parece válido/);
+  assert.match(textos(s[8]), /Ainda falta: telefone com DDD/);
+  assert.equal(s[9].estado, 'aguardando_validacao');
+  assert.equal(s[9].efeitos.atualizarPedido.telefone, '71999998888');
 });
 
 test('Pix no Instagram: o pedido do comprovante fica com a coleta do ManyChat', () => {
@@ -88,11 +102,12 @@ test('quantidade inválida e CPF/e-mail inválidos não avançam', () => {
   assert.equal(s[2].estado, 'escolhendo_qtd');
   assert.match(textos(s[2]), /de 1 a 10/);
   assert.equal(s[3].estado, 'escolhendo_pagamento');
-  assert.equal(s[6].estado, 'coletando_nome', 'nome sem sobrenome');
-  assert.equal(s[8].estado, 'coletando_cpf', 'CPF repetido');
-  assert.equal(s[9].estado, 'coletando_cpf', 'dígito errado');
-  assert.equal(s[10].estado, 'coletando_email');
-  assert.equal(s[11].estado, 'coletando_email');
+  assert.match(textos(s[6]), /Ainda falta: nome completo, CPF/, 'nome sem sobrenome');
+  assert.match(textos(s[7]), /Ainda falta: CPF e e-mail/);
+  assert.match(textos(s[8]), /CPF não parece válido/, 'CPF repetido');
+  assert.match(textos(s[9]), /CPF não parece válido/, 'dígito errado');
+  assert.match(textos(s[10]), /Ainda falta: e-mail/);
+  assert.equal(s[11].estado, 'coletando_dados', 'e-mail incompleto');
   assert.equal(s[12].estado, 'aguardando_validacao');
 });
 

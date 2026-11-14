@@ -62,10 +62,8 @@ async function fluxoPix() {
   assert.equal(r[1].text, sql("select valor from app.config where chave='pix_chave'"));
   r = await manda(c, comprovante);
   assert.ok(r.some((m) => m.number === ADMIN && m.tipo === 'sendMedia'), 'comprovante encaminhado ao admin');
-  r = await manda(c, txt('Maria Simulada Souza'));
-  r = await manda(c, txt('529.982.247-25'));
-  assert.match(doCliente(r, c), /e-mail/);
-  r = await manda(c, txt('maria@exemplo.com'));
+  assert.match(doCliente(r, c), /numa mensagem só/);
+  r = await manda(c, txt('Maria Simulada Souza\n529.982.247-25\nmaria@exemplo.com'));
   const id = sql(`select id from app.pedidos where contato_id='${c}' order by id desc limit 1`);
   assert.equal(sql(`select status from app.pedidos where id=${id}`), 'aguardando_validacao');
   assert.ok(r.some((m) => m.number === ADMIN && m.text.includes(`/aprovar ${id}`) && m.text.includes('***.982.247-**')), 'admin recebe CPF mascarado');
@@ -175,18 +173,17 @@ async function instagram() {
   assert.equal(r.estado, 'aguardando_comprovante');
   assert.equal(r.json.content.messages.length, 3, 'resumo + chave isolada + instrução');
   r = await passo({ comprovante_url: 'https://lookaside.fbsbx.com/ig_messaging_cdn/?asset_id=1&signature=abc' });
-  assert.equal(r.estado, 'coletando_nome');
+  assert.equal(r.estado, 'coletando_dados');
   assert.match(sql(`select comprovante_url from app.pedidos where canal='instagram' and contato_id='${ig}'`), /lookaside/);
   const id = sql(`select id from app.pedidos where canal='instagram' and contato_id='${ig}'`);
   // Aprovar pelo painel antes dos dados é recusado (não encerra a conversa no meio).
   const aprovar = async () => (await (await fetch(`${N8N}/webhook/painel-admin`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-painel-token': process.env.PAINEL_TOKEN }, body: JSON.stringify({ texto: `/aprovar ${id}` }) })).json()).texto;
   assert.match(await aprovar(), /não está pronto/);
-  r = await passo({ texto: 'Bia Teste Silva' });
-  assert.equal(r.estado, 'coletando_cpf');
-  r = await passo({ texto: '111.444.777-35' });
-  assert.equal(r.estado, 'coletando_email');
-  r = await passo({ texto: 'bia@exemplo.com' });
+  r = await passo({ texto: 'Bia Teste Silva, 111.444.777-35, bia@exemplo.com' });
+  assert.equal(r.estado, 'coletando_dados', 'no Instagram falta o telefone');
+  r = await passo({ texto: '(71) 98888-7777' });
   assert.equal(r.estado, 'aguardando_validacao');
+  assert.equal(sql(`select telefone from app.pedidos where id=${id}`), '71988887777');
   const texto = await aprovar();
   console.log(`  → /aprovar ${id} pelo painel\n    🧑‍💼 ${texto}`);
   assert.match(texto, /aprovado/);

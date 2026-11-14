@@ -1,6 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validarCpf, mascararCpf, mascararCpfsNoTexto, validarEmail } from './cpf.js';
+import { validarCpf, mascararCpf, mascararCpfsNoTexto, validarEmail, extrairDados } from './cpf.js';
+
+test('extrairDados: tudo numa mensagem, em qualquer formato', () => {
+  const esperado = { nome: 'Ana Maria Souza', cpf: '52998224725', email: 'ana@ex.com', telefone: '71999998888' };
+  assert.deepEqual(extrairDados('Ana Maria Souza\n529.982.247-25\nana@ex.com\n(71) 99999-8888'), esperado);
+  assert.deepEqual(extrairDados('Nome: Ana Maria Souza, CPF: 52998224725, Email: ANA@ex.com, Tel: +55 71 99999-8888'), esperado);
+  assert.deepEqual(extrairDados('Ana Maria Souza 529.982.247-25 ana@ex.com 71 99999-8888'), esperado);
+  // aos poucos e com erro
+  assert.deepEqual(extrairDados('já paguei'), {});
+  assert.deepEqual(extrairDados('meu cpf é 529.982.247-24'), { cpfInvalido: true });
+  assert.deepEqual(extrairDados('52998224724', { telefone: false }), { cpfInvalido: true });
+  assert.deepEqual(extrairDados('71999998888', { telefone: false }), { cpfInvalido: true });
+  assert.deepEqual(extrairDados('ana@ex.com'), { email: 'ana@ex.com' });
+});
 import { render, formatarPreco, formatarData, textoBot } from './templates.js';
 import { atalhos, extrairQuantidade, acharEvento, opcaoMenu } from './extrator.js';
 import { parseComando, sqlComando, formatarResposta } from './comandos.js';
@@ -64,6 +77,7 @@ test('comandos: SQL e respostas', () => {
   assert.deepEqual([r.cliente.canal, r.cliente.contato_id], ['instagram', '99']);
   assert.match(r.cliente.mensagens[0].texto, /Pagode foi aprovado/);
   assert.doesNotMatch(r.cliente.mensagens[0].texto, /#7/);
+  assert.match(r.cliente.mensagens[0].texto, /enviado pela ticketeira oficial do evento[\s\S]*Obrigado pela preferência de escolher a BF Tickets/);
   const rec = formatarResposta({ cmd: 'recusar', id: 7 }, [{ id: 7, canal: 'whatsapp', contato_id: '1', status: 'recusado', motivo_recusa: 'valor', textos: {} }]);
   assert.match(rec.cliente.mensagens[0].texto, /Motivo: valor/);
   assert.match(formatarResposta({ cmd: 'aprovar', id: 9 }, [{}]).admin, /não está pronto pra aprovar/);

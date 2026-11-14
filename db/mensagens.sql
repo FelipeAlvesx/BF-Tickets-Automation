@@ -35,16 +35,20 @@ Depois de pagar, manda aqui o comprovante (foto ou print).'),
   ('pix_titular', 'Titular: {pix_titular} ({pix_banco}).'),
   ('lembrar_comprovante', 'Tô aguardando o comprovante do Pix (foto ou print) pra seguir com o pedido.'),
   ('comprovante_recebido', 'Comprovante recebido ✅
-Agora preciso de alguns dados pra emitir o ingresso.
-Qual seu nome completo?'),
-  ('nome_invalido', 'Me manda o nome completo, por favor (nome e sobrenome).'),
-  ('pedir_cpf', 'Valeu! Agora o CPF:'),
+Pra emitir o ingresso, me manda numa mensagem só:
+
+• Nome completo
+• CPF
+• E-mail da sua conta na {ticketeira}{item_telefone}
+
+⚠️ O ingresso é enviado pela {ticketeira}, então use o mesmo e-mail da sua conta lá.'),
+  ('dados_faltando', 'Quase lá! Ainda falta: {faltando}.'),
   ('cpf_invalido', 'Esse CPF não parece válido. Confere e manda de novo?'),
-  ('pedir_email', 'E o seu e-mail?'),
-  ('email_invalido', 'Esse e-mail não parece válido. Manda de novo?'),
   ('aguardando_validacao', 'Pronto! Seu pedido está em validação. Assim que conferirmos o pagamento eu te aviso por aqui.'),
   ('ainda_validando', 'Seu pedido ainda está em validação. Já já te aviso!'),
-  ('pedido_aprovado', 'Pagamento confirmado ✅ Seu pedido pra {evento} foi aprovado! O ingresso chega no seu e-mail.'),
+  ('pedido_aprovado', 'Pagamento confirmado ✅ Seu pedido pra {evento} foi aprovado! O ingresso vai ser enviado pela {ticketeira} pro e-mail que você informou.
+
+Obrigado pela preferência de escolher a BF Tickets! 🎟'),
   ('pedido_recusado', 'Não conseguimos validar o seu pedido pra {evento}.{motivo}
 Se precisar, é só chamar.'),
   ('venda_evento', 'Massa! De qual evento é o ingresso que você quer vender?'),
@@ -68,10 +72,12 @@ Se precisar, é só chamar.'),
 {canal} · {contato}
 {quantidade}x {evento} = {total}
 
-Ainda faltam nome, CPF e e-mail do cliente. O aviso pra aprovar chega em seguida.'),
+Ainda faltam os dados do cliente. O aviso pra aprovar chega em seguida.'),
   ('admin_validar', '✅ Pedido #{pedido_id} pronto pra validar
 {quantidade}x {evento} = {total}
-{nome_cliente_completo} · CPF {cpf_mascarado} · {email}
+Ticketeira: {ticketeira_admin}
+{nome_cliente_completo} · CPF {cpf_mascarado}
+{email} · {telefone}
 
 /aprovar {pedido_id}
 /recusar {pedido_id} motivo'),

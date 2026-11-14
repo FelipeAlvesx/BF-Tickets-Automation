@@ -1,7 +1,7 @@
 // Edição de tabelas pelo painel: só tabelas e colunas desta lista; valores sempre por parâmetro ($1...).
 
 export const TABELAS = {
-  eventos: { pk: 'id', cols: ['nome', 'data_evento', 'local', 'link_compra', 'preco', 'imagem_url', 'ativo'], apagar: true,
+  eventos: { pk: 'id', cols: ['nome', 'data_evento', 'local', 'link_compra', 'preco', 'imagem_url', 'ticketeira', 'ativo'], apagar: true,
     listar: 'select * from app.eventos order by ativo desc, data_evento' },
   agenda: { pk: 'id', cols: ['horario', 'dias_semana', 'texto', 'imagem_url', 'evento_id', 'enviar_grupo', 'lembrete_story', 'ativo'], apagar: true,
     listar: `select a.*, e.nome as evento, e.ativo as evento_ativo, (e.data_evento < now()) as evento_passou,

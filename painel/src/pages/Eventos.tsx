@@ -10,7 +10,7 @@ import { brl } from '@/lib/format'
 import type { Evento } from '@/lib/types'
 
 type Form = Omit<Evento, 'id' | 'data_evento'> & { id?: number; data_evento: string }
-const vazio: Form = { nome: '', data_evento: '', local: '', link_compra: '', preco: '', imagem_url: '', ativo: true }
+const vazio: Form = { nome: '', data_evento: '', local: '', link_compra: '', preco: '', imagem_url: '', ticketeira: '', ativo: true }
 
 export default function Eventos() {
   const { data, salvar, apagar } = useTabela<Evento>('eventos')
@@ -34,6 +34,7 @@ export default function Eventos() {
                 <p className="font-display text-xl leading-tight">{e.nome}</p>
                 <p className="mt-2 flex items-center gap-1.5 text-sm text-muted"><CalendarDays className="size-4" />{dataBahia(e.data_evento)}</p>
                 <p className="flex items-center gap-1.5 text-sm text-muted"><MapPin className="size-4" />{e.local || '—'}</p>
+                <p className="flex items-center gap-1.5 text-sm text-muted"><Ticket className="size-4" />{e.ticketeira || 'Ticketeira não cadastrada'}</p>
                 <p className="mt-2 font-semibold tabular">{brl(Number(e.preco))}</p>
               </button>
               <div className="flex flex-col items-end justify-between p-4">
@@ -55,6 +56,7 @@ export default function Eventos() {
             <Campo rotulo="Data e hora (horário da Bahia)"><input type="datetime-local" className="field" value={form.data_evento} onChange={e => set('data_evento', e.target.value)} /></Campo>
             <Campo rotulo="Local"><input className="field" value={form.local ?? ''} onChange={e => set('local', e.target.value)} /></Campo>
             <Campo rotulo="Preço por ingresso (R$)"><input className="field" inputMode="decimal" value={form.preco} onChange={e => set('preco', e.target.value)} /></Campo>
+            <Campo rotulo="Ticketeira de origem" dica="Ex.: Ticketmaker, Ingresse, Sympla. O bot pede ao cliente o e-mail da conta dele nessa ticketeira, porque é lá que o ingresso cai."><input className="field" placeholder="Ticketmaker" value={form.ticketeira ?? ''} onChange={e => set('ticketeira', e.target.value)} /></Campo>
             <Campo rotulo="Link oficial de compra" dica="É o que o bot manda quando o cliente escolhe pagar pelo link."><input type="url" className="field" value={form.link_compra ?? ''} onChange={e => set('link_compra', e.target.value)} /></Campo>
             <Campo rotulo="URL da arte" dica="Usada no grupo e no lembrete de story quando a linha da agenda não tem imagem própria."><input type="url" className="field" value={form.imagem_url ?? ''} onChange={e => set('imagem_url', e.target.value)} /></Campo>
             <Liga rotulo="Ativo" dica="Desligado, o bot não oferece este evento." on={form.ativo} onChange={v => set('ativo', v)} />

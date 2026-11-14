@@ -15,7 +15,7 @@ export function lit(v) {
   return `U&'${s.replace(/\\/g, '\\\\').replace(/\$/g, '\\0024')}'`;
 }
 
-const COLUNAS_PEDIDO = ['comprovante_url', 'nome', 'cpf', 'email', 'status'];
+const COLUNAS_PEDIDO = ['comprovante_url', 'nome', 'cpf', 'email', 'telefone', 'status'];
 
 // ctx = entrada do core; r = resultado de processar(). Devolve 1 linha: {pedido_id}.
 export function sqlGravar(ctx, r) {

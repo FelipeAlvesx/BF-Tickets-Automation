@@ -16,16 +16,14 @@ export const TEXTOS_PADRAO = {
   // Instagram: o pedido do comprovante é a pergunta da coleta de imagem do ManyChat (manychat/SETUP.md).
   pix_titular: 'Titular: {pix_titular} ({pix_banco}).',
   lembrar_comprovante: 'Tô aguardando o comprovante do Pix (foto ou print) pra seguir com o pedido.',
-  comprovante_recebido: 'Comprovante recebido ✅\nAgora preciso de alguns dados pra emitir o ingresso.\nQual seu nome completo?',
-  nome_invalido: 'Me manda o nome completo, por favor (nome e sobrenome).',
-  pedir_cpf: 'Valeu! Agora o CPF:',
+  // {item_telefone} só aparece no Instagram (no WhatsApp o número já é o do cliente).
+  comprovante_recebido: 'Comprovante recebido ✅\nPra emitir o ingresso, me manda numa mensagem só:\n\n• Nome completo\n• CPF\n• E-mail da sua conta na {ticketeira}{item_telefone}\n\n⚠️ O ingresso é enviado pela {ticketeira}, então use o mesmo e-mail da sua conta lá.',
+  dados_faltando: 'Quase lá! Ainda falta: {faltando}.',
   cpf_invalido: 'Esse CPF não parece válido. Confere e manda de novo?',
-  pedir_email: 'E o seu e-mail?',
-  email_invalido: 'Esse e-mail não parece válido. Manda de novo?',
   // Textos do cliente não mostram o número do pedido (só o admin vê, para aprovar).
   aguardando_validacao: 'Pronto! Seu pedido está em validação. Assim que conferirmos o pagamento eu te aviso por aqui.',
   ainda_validando: 'Seu pedido ainda está em validação. Já já te aviso!',
-  pedido_aprovado: 'Pagamento confirmado ✅ Seu pedido pra {evento} foi aprovado! O ingresso chega no seu e-mail.',
+  pedido_aprovado: 'Pagamento confirmado ✅ Seu pedido pra {evento} foi aprovado! O ingresso vai ser enviado pela {ticketeira} pro e-mail que você informou.\n\nObrigado pela preferência de escolher a BF Tickets! 🎟',
   pedido_recusado: 'Não conseguimos validar o seu pedido pra {evento}.{motivo}\nSe precisar, é só chamar.',
   venda_evento: 'Massa! De qual evento é o ingresso que você quer vender?',
   venda_qtd: 'Quantos ingressos?',
@@ -39,8 +37,8 @@ export const TEXTOS_PADRAO = {
   cancelado: 'Beleza, cancelei. Se quiser recomeçar é só mandar um oi.',
   midia_nao_suportada: 'Por aqui só consigo ler texto, foto ou PDF. Pode escrever?',
   // avisos ao admin
-  admin_comprovante: '🧾 Comprovante recebido — pedido #{pedido_id}\n{canal} · {contato}\n{quantidade}x {evento} = {total}\n\nAinda faltam nome, CPF e e-mail do cliente. O aviso pra aprovar chega em seguida.',
-  admin_validar: '✅ Pedido #{pedido_id} pronto pra validar\n{quantidade}x {evento} = {total}\n{nome_cliente_completo} · CPF {cpf_mascarado} · {email}\n\n/aprovar {pedido_id}\n/recusar {pedido_id} motivo',
+  admin_comprovante: '🧾 Comprovante recebido — pedido #{pedido_id}\n{canal} · {contato}\n{quantidade}x {evento} = {total}\n\nAinda faltam os dados do cliente. O aviso pra aprovar chega em seguida.',
+  admin_validar: '✅ Pedido #{pedido_id} pronto pra validar\n{quantidade}x {evento} = {total}\nTicketeira: {ticketeira_admin}\n{nome_cliente_completo} · CPF {cpf_mascarado}\n{email} · {telefone}\n\n/aprovar {pedido_id}\n/recusar {pedido_id} motivo',
   admin_humano: '🙋 {canal} · {contato} ({nome}) pediu atendente. Bot pausado nesse chat.',
   admin_venda: '💸 Oferta de venda #{oferta_id}\n{canal} · {contato} ({nome})\nEvento: {evento_texto}\nQtd: {quantidade} · Setor: {setor} · Valor: {valor}',
   admin_story: '📲 Hora do story! Arte acima, legenda e link abaixo:',
@@ -71,9 +69,14 @@ export function formatarPreco(v) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v)).replace(/\s/g, ' ');
 }
 
+// Nome da ticketeira de origem do evento (Ticketmaker, Ingresse...) para os textos do cliente.
+export function ticketeira(e) {
+  return String(e?.ticketeira ?? '').trim() || 'ticketeira oficial do evento';
+}
+
 export function varsEvento(e) {
   if (!e) return {};
-  return { nome: e.nome, evento: e.nome, data: formatarData(e.data_evento), local: e.local ?? '', link: e.link_compra ?? '', preco: formatarPreco(e.preco) };
+  return { nome: e.nome, evento: e.nome, data: formatarData(e.data_evento), local: e.local ?? '', link: e.link_compra ?? '', preco: formatarPreco(e.preco), ticketeira: ticketeira(e) };
 }
 
 export function listaEventos(eventos) {

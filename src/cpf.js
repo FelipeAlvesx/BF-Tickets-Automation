@@ -35,3 +35,39 @@ export function mascararCpfsNoTexto(texto) {
 export function validarEmail(s) {
   return /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(String(s ?? '').trim());
 }
+
+// Palavras que não são nome (evita "já paguei" virar o nome do cliente).
+const NAO_NOME = new Set(['ja', 'já', 'paguei', 'pago', 'ok', 'oi', 'ola', 'olá', 'segue', 'seguem', 'aqui', 'pronto', 'obrigado',
+  'obrigada', 'valeu', 'bom', 'boa', 'dia', 'tarde', 'noite', 'meu', 'minha', 'meus', 'dados', 'sim', 'nao', 'não', 'comprovante',
+  'pix', 'enviei', 'mandei', 'certo', 'beleza', 'blz', 'tudo', 'bem', 'tá', 'ta', 'esta', 'está']);
+const NUM = /[+(]?\d[\d().-]*/g;
+
+// Lê nome, CPF, e-mail e telefone de uma mensagem livre (uma linha por dado, vírgulas ou tudo junto).
+// CPF só vale com dígito verificador certo; com telefone=false, 11 dígitos inválidos contam como CPF errado.
+// -> { nome?, cpf? (só dígitos), email?, telefone? (DDD+número), cpfInvalido? }
+export function extrairDados(texto, { telefone: querTelefone = true } = {}) {
+  const out = {};
+  let t = String(texto ?? '');
+  const em = t.match(/[^\s@,;:<>()]+@[^\s@,;:<>()]+\.[a-z]{2,}/i);
+  if (em) { out.email = em[0].toLowerCase(); t = t.replace(em[0], ' '); }
+  t = t.replace(/\b(meu nome (é|e)|me chamo|nome completo|nome|cpf|e-?mail|telefone|celular|whatsapp|whats|tel|cel|fone)\b\s*[:=-]?/gi, ' ');
+  for (const linha of t.split(/[\n,;|]+/)) {
+    const nums = linha.match(NUM) ?? [];
+    for (let i = 0; i < nums.length; i++) {
+      const d = soDigitos(nums[i]);
+      if (d.length === 11 && validarCpf(d)) { out.cpf ??= d; continue; }
+      if (/^\d{3}\.\d{3}\.\d{3}-\d{2}$/.test(nums[i]) || (d.length === 11 && !querTelefone)) { out.cpfInvalido = true; continue; }
+      // Telefone pode vir quebrado: "(71) 99999-8888", "+55 71 99999-8888".
+      let acc = d;
+      let j = i;
+      while (acc.length < 10 && j + 1 < nums.length) acc += soDigitos(nums[++j]);
+      if (querTelefone && acc.length >= 10 && acc.length <= 13) { out.telefone ??= acc.replace(/^55(?=\d{10,11}$)/, ''); i = j; }
+    }
+    const palavras = linha.replace(NUM, ' ').replace(/[^\p{L}'’.\s-]/gu, ' ').trim().split(/\s+/).filter((p) => /\p{L}/u.test(p));
+    if (!out.nome && palavras.length >= 2 && !palavras.some((p) => NAO_NOME.has(p.toLowerCase()))) {
+      const nome = palavras.join(' ');
+      if (nome.length <= 100) out.nome = nome;
+    }
+  }
+  return out;
+}

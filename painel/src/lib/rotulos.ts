@@ -9,7 +9,7 @@ export const STATUS_PEDIDO: Record<string, [string, string]> = {
 export const ESTADO_CONVERSA: Record<string, string> = {
   inicio: 'No menu', escolhendo_evento: 'Escolhendo evento', escolhendo_qtd: 'Escolhendo quantidade',
   escolhendo_pagamento: 'Escolhendo pagamento', aguardando_comprovante: 'Aguardando Pix', coletando_nome: 'Mandando nome',
-  coletando_cpf: 'Mandando CPF', coletando_email: 'Mandando e-mail', aguardando_validacao: 'Aguardando validação',
+  coletando_cpf: 'Mandando CPF', coletando_email: 'Mandando e-mail', coletando_dados: 'Mandando os dados', aguardando_validacao: 'Aguardando validação',
   venda_coletando: 'Quer vender', humano: 'Com atendente',
 }
 export const STATUS_OFERTA: Record<string, [string, string]> = {

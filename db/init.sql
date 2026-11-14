@@ -20,6 +20,7 @@ create table eventos (
   link_compra text,
   preco numeric(10,2) not null default 0,
   imagem_url text,
+  ticketeira text,            -- ticketeira de origem (Ticketmaker, Ingresse...): o cliente manda o e-mail da conta dele lá
   ativo boolean not null default true
 );
 
@@ -60,6 +61,7 @@ create table pedidos (
   nome text,
   cpf text,                   -- LGPD: CPF só aqui
   email text,
+  telefone text,              -- WhatsApp: o próprio número; Instagram: informado pelo cliente
   motivo_recusa text,
   criado_em timestamptz not null default now(),
   atualizado_em timestamptz not null default now()
