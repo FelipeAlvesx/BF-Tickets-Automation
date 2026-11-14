@@ -78,7 +78,8 @@ make tunel
 ```
 
 O comando imprime a URL `https://xxxx.trycloudflare.com/webhook/manychat`. Ela muda a cada execução,
-então atualize a URL do bloco Dynamic. O painel (Ajustes → Instagram) também mostra a URL atual.
+**e o túnel expira em cerca de um dia** ("Tunnel not found" nos logs do cloudflared): refaça com `make tunel`
+e atualize a URL do bloco Dynamic (Edit Request → Request URL → Save → Update). Na VPS isso não existe. O painel (Ajustes → Instagram) também mostra a URL atual.
 Desligue depois: `docker compose --profile dev stop cloudflared`.
 
 Teste local sem ManyChat (usa os fixtures de `tests/fixtures/manychat-*.json`):
