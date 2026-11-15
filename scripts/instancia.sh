@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 set -a; . ./.env; set +a
 EVO="http://localhost:${EVOLUTION_PORT:-8095}"
 H=(-H "apikey: $EVOLUTION_API_KEY" -H "Content-Type: application/json")
-WEBHOOK='{"url":"http://n8n:5678/webhook/evolution","byEvents":false,"base64":true,"events":["MESSAGES_UPSERT","CONNECTION_UPDATE"]}'
+WEBHOOK='{"url":"http://n8n:5678/webhook/evolution","byEvents":false,"base64":true,"events":["MESSAGES_UPSERT"]}'
 if ! curl -fsS "${H[@]}" "$EVO/instance/fetchInstances?instanceName=$EVOLUTION_INSTANCE" 2>/dev/null | grep -q "\"name\":\"$EVOLUTION_INSTANCE\""; then
   curl -fsS "${H[@]}" -X POST "$EVO/instance/create" \
     -d "{\"instanceName\":\"$EVOLUTION_INSTANCE\",\"integration\":\"WHATSAPP-BAILEYS\",\"qrcode\":true,\"webhook\":$WEBHOOK}" >/dev/null
