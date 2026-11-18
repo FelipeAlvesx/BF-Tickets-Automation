@@ -33,7 +33,7 @@ async function evo(method, path, body) {
   if (!r.ok) throw erro(r.status === 404 ? 404 : 502, data?.response?.message?.toString?.() || data?.message || `Evolution respondeu ${r.status}`);
   return data;
 }
-const WEBHOOK = { enabled: true, url: E.EVOLUTION_WEBHOOK, byEvents: false, base64: true, events: ['MESSAGES_UPSERT', 'CONNECTION_UPDATE'] };
+const WEBHOOK = { enabled: true, url: E.EVOLUTION_WEBHOOK, byEvents: false, base64: true, events: ['MESSAGES_UPSERT'] };
 
 async function whatsapp() {
   const grupo = (await q("select valor from app.config where chave='grupo_jid'"))[0]?.valor || '';

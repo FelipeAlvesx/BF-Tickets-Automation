@@ -7,6 +7,8 @@ O `docker-compose.yml` é o mesmo do computador. Os serviços escutam só em `12
 - VPS Ubuntu 24.04 com **2 vCPU e 4 GB de RAM** (2 GB funciona com swap) e 40 GB de disco.
 - No DNS do domínio, crie 3 registros **A** apontando para o IP da VPS:
   `painel.seudominio.com.br`, `n8n.seudominio.com.br` e `nocodb.seudominio.com.br`.
+- Sem domínio, use `painel.<ip-com-hífens>.sslip.io` (e o mesmo para `n8n.` e `nocodb.`): já aponta para o IP e o HTTPS funciona. Trocar depois é só mudar `.env`, Caddyfile e a URL do ManyChat.
+- StayCloud: não use a aba **Apps** do painel (ela reinstala o sistema e apaga o disco). O firewall do painel pode ficar desligado, porque o `ufw` cuida disso.
 
 ## 2. Preparar o servidor
 
@@ -41,7 +43,13 @@ LINK_N8N=https://n8n.seudominio.com.br
 LINK_NOCODB=https://nocodb.seudominio.com.br
 ```
 
-Para levar um número já pareado do computador sem novo QR, copie o backup do banco (`make backup` lá e `make restore F=...` aqui). Senão, basta parear de novo pelo painel.
+Para levar os dados do bot (pedidos, eventos, conversas, config), desconecte o WhatsApp do computador (painel → WhatsApp → Desconectar), pare `n8n` e `evolution` lá, rode `make backup` e restaure só o schema `app` aqui:
+
+```bash
+docker compose exec -T postgres sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" -n app --clean --if-exists --no-owner' < backups/ARQUIVO.dump
+```
+
+Depois pareie o WhatsApp de novo pelo painel. Nunca deixe os dois ligados no mesmo número: o cliente recebe resposta em dobro.
 
 ## 4. Caddy (HTTPS)
 
@@ -70,6 +78,8 @@ O painel tem Basic Auth, o n8n tem login de dono e o NocoDB tem login de admin. 
 ```bash
 make up && make import && make nocodb
 ```
+
+Logo em seguida abra `https://n8n.seudominio.com.br` e crie a conta de dono: até isso ser feito, qualquer um que abrir o endereço pode criá-la.
 
 Depois conecte o WhatsApp pelo painel (`https://painel.seudominio.com.br` → WhatsApp) e troque a URL do ManyChat para `https://n8n.seudominio.com.br/webhook/manychat`.
 
